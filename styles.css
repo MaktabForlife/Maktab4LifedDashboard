@@ -76,8 +76,8 @@ h3 {
 }
 
 
-.student-theme h1,{color: var(--student-dark);}
-.student-theme h2,{color: var(--student-dark);}
+.student-theme h1 {color: var(--student-dark);}
+.student-theme h2 {color: var(--student-dark);}
 .student-theme h3 { color: var(--student-dark);}
 
 

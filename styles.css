@@ -251,8 +251,14 @@ button:active {
   color: #555;
 }
 
+
 .status-pill {
-  display: inline-block;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap; 
+  overflow-x: auto;
+   flex-shrink: 0; 
+  gap: 10px;     
   margin-top: 10px;
   padding: 6px 9px;
   border-radius: 999px;

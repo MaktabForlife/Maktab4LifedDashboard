@@ -229,25 +229,65 @@ async function showStudentTasks() {
     return;
   }
 
-  container.innerHTML = result.tasks.map(task => `
-    <div class="task-card">
-      <div class="task-title">${escapeHtml(task.taskname)}</div>
-      <div class="task-meta">${escapeHtml(task.subjectname)}</div>
+  const grouped = groupTasksBySubject(result.tasks);
 
-      <div class="status-pill">
-        ${escapeHtml(task.displayCompleteStatus)}
+  let html = "";
+
+  Object.keys(grouped).forEach(subjectName => {
+    const subjectTasks = grouped[subjectName];
+    const completed = subjectTasks.filter(t => t.completestatus).length;
+    const total = subjectTasks.length;
+    const percentDone = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+    html += `
+      <div class="subject-heading">
+        ${escapeHtml(subjectName)}
       </div>
 
-      <div class="status-pill">
-        ${escapeHtml(task.displayVerifyStatus)}
+      <div class="mini-progress-box">
+        <div class="mini-progress-number">${percentDone}%</div>
+        <div class="mini-text">Completed</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" style="width:${percentDone}%"></div>
+        </div>
       </div>
+    `;
 
-      <button style="margin-top:12px;" onclick="toggleStudentTask('${task.studenttaskid}', ${task.completestatus ? "false" : "true"})">
-        ${task.completestatus ? "Mark Not Complete" : "Mark Complete"}
-      </button>
-    </div>
-  `).join("");
+    subjectTasks.forEach(task => {
+      const isComplete = !!task.completestatus;
+      const isVerified = !!task.verifystatus;
+
+      html += `
+        <div class="task-card">
+          <div class="task-title">${escapeHtml(task.taskname)}</div>
+
+          <div class="task-status-row">
+            <span class="status-pill">
+              ${isComplete ? "COMPLETE" : "TO BE COMPLETED"}
+            </span>
+
+            <span class="status-pill">
+              ${isVerified ? "VERIFIED" : "NOT VERIFIED"}
+            </span>
+          </div>
+
+          ${renderTaskLinks(task)}
+
+          <div class="task-actions">
+            <button onclick="toggleStudentTask('${task.studenttaskid}', ${isComplete ? "false" : "true"})">
+              ${isComplete ? "Mark Not Complete" : "Mark Complete"}
+            </button>
+          </div>
+        </div>
+      `;
+    });
+  });
+
+  container.innerHTML = html;
 }
+
+
+
 
 async function toggleStudentTask(studenttaskid, complete) {
   const result = await apiPost("/api/tasks/update-complete", {
@@ -288,6 +328,7 @@ async function loadProgressReport() {
         <div class="stat-number">${result.summary.completedPercent}%</div>
         <div class="mini-text">Completed</div>
       </div>
+
       <div class="stat-card">
         <div class="stat-number">${result.summary.verifiedPercent}%</div>
         <div class="mini-text">Verified</div>
@@ -303,13 +344,152 @@ async function loadProgressReport() {
               <div class="task-title">${escapeHtml(group.classgroup)}</div>
               <div class="task-meta">Completed: ${group.completedPercent}%</div>
               <div class="task-meta">Verified: ${group.verifiedPercent}%</div>
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" style="width:${group.verifiedPercent}%"></div>
+              </div>
             </div>
           `).join("")
           : `<p class="helper-text">No group data yet.</p>`
       }
     </div>
+
+    <div class="dashboard-section">
+      <h3>Students</h3>
+      ${
+        result.students.length
+          ? result.students.map(student => `
+            <div class="task-card admin-task-card clickable-card" onclick="openTeacherStudentTasks('${student.studentid}', '${escapeForAttribute(student.username)}')">
+              <div class="task-title">${escapeHtml(student.username)}</div>
+              <div class="task-meta">${escapeHtml(student.classgroup)}</div>
+
+              <div class="mini-progress-grid">
+                <div class="mini-progress-box">
+                  <div class="mini-progress-number">${student.completedPercent}%</div>
+                  <div class="mini-text">Completed</div>
+                </div>
+
+                <div class="mini-progress-box">
+                  <div class="mini-progress-number">${student.verifiedPercent}%</div>
+                  <div class="mini-text">Verified</div>
+                </div>
+              </div>
+            </div>
+          `).join("")
+          : `<p class="helper-text">No student data yet.</p>`
+      }
+    </div>
   `;
 }
+
+
+async function openTeacherStudentTasks(studentid, username) {
+  showScreen("teacher-student-tasks");
+
+  document.getElementById("teacher-student-tasks-title").innerText =
+    username ? `${username}'s Tasks` : "Student Tasks";
+
+  const container = document.getElementById("teacher-student-task-list");
+  container.innerHTML = `<p class="helper-text">Loading tasks...</p>`;
+
+  const result = await apiPost("/api/tasks/student", {
+    studentid,
+    subjectid: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || "Failed to load tasks"}</p>`;
+    return;
+  }
+
+  if (result.tasks.length === 0) {
+    container.innerHTML = `<p class="helper-text">No tasks assigned to this student.</p>`;
+    return;
+  }
+
+  const grouped = groupTasksBySubject(result.tasks);
+
+  let html = "";
+
+  Object.keys(grouped).forEach(subjectName => {
+    html += `
+      <div class="subject-heading">
+        ${escapeHtml(subjectName)}
+      </div>
+    `;
+
+    grouped[subjectName].forEach(task => {
+      const isComplete = !!task.completestatus;
+      const isVerified = !!task.verifystatus;
+
+      html += `
+        <div class="task-card admin-task-card">
+          <div class="task-title">${escapeHtml(task.taskname)}</div>
+
+          <div class="task-status-row">
+            <span class="status-pill">
+              ${isComplete ? "COMPLETE" : "TO BE COMPLETED"}
+            </span>
+
+            <span class="status-pill">
+              ${isVerified ? "VERIFIED" : "NOT VERIFIED"}
+            </span>
+          </div>
+
+          ${renderTaskLinks(task)}
+
+          <div class="task-actions">
+            <button onclick="teacherToggleComplete('${task.studenttaskid}', ${isComplete ? "false" : "true"}, '${studentid}', '${escapeForAttribute(username)}')">
+              ${isComplete ? "Mark Not Complete" : "Mark Complete"}
+            </button>
+
+            <button onclick="teacherToggleVerified('${task.studenttaskid}', ${isVerified ? "false" : "true"}, '${studentid}', '${escapeForAttribute(username)}')">
+              ${isVerified ? "Unverify" : "Verify"}
+            </button>
+          </div>
+        </div>
+      `;
+    });
+  });
+
+  container.innerHTML = html;
+}
+
+async function teacherToggleComplete(studenttaskid, complete, studentid, username) {
+  const result = await apiPost("/api/tasks/update-complete", {
+    studenttaskid,
+    complete
+  }, state.token);
+
+  if (!result.success) {
+    alert(result.error || "Could not update task.");
+    return;
+  }
+
+  openTeacherStudentTasks(studentid, username);
+}
+
+async function teacherToggleVerified(studenttaskid, verified, studentid, username) {
+  const result = await apiPost("/api/admin/tasks/verify", {
+    studenttaskid,
+    verified
+  }, state.token);
+
+  if (!result.success) {
+    alert(result.error || "Could not verify task.");
+    return;
+  }
+
+  openTeacherStudentTasks(studentid, username);
+}
+
+function escapeForAttribute(value) {
+  return String(value || "")
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'")
+    .replaceAll('"', "&quot;");
+}
+
+
 
 
 let allSubjects = [];
@@ -584,7 +764,57 @@ function normalizeClientText(value) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function groupTasksBySubject(tasks) {
+  const grouped = {};
 
+  tasks.forEach(task => {
+    const subjectName = task.subjectname || "Other";
+
+    if (!grouped[subjectName]) {
+      grouped[subjectName] = [];
+    }
+
+    grouped[subjectName].push(task);
+  });
+
+  Object.keys(grouped).forEach(subjectName => {
+    grouped[subjectName].sort((a, b) => {
+      return String(a.taskname).localeCompare(String(b.taskname));
+    });
+  });
+
+  return grouped;
+}
+
+function renderTaskLinks(task) {
+  const links = [];
+
+  if (task.pdflink) {
+    links.push(`<a href="${escapeHtml(task.pdflink)}" target="_blank">PDF</a>`);
+  }
+
+  if (task.audiolink) {
+    links.push(`<a href="${escapeHtml(task.audiolink)}" target="_blank">Audio</a>`);
+  }
+
+  if (task.videolink) {
+    links.push(`<a href="${escapeHtml(task.videolink)}" target="_blank">Video</a>`);
+  }
+
+  if (task.visuallink) {
+    links.push(`<a href="${escapeHtml(task.visuallink)}" target="_blank">Visual</a>`);
+  }
+
+  if (links.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="task-meta" style="margin-top:10px;">
+      Resources: ${links.join(" · ")}
+    </div>
+  `;
+}
 
 
 

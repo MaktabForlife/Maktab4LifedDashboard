@@ -529,6 +529,16 @@ button:active {
   }
 }
 
+.status-action {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save-btn {
+  margin-top: 16px;
+}
 
 
 

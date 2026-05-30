@@ -187,17 +187,27 @@
       <option value="">Select subject...</option>
     </select>
 
-    <div id="modify-subject-box" class="hidden">
-      <input id="modify-subject-name" type="text" placeholder="Subject name" />
+   <div id="modify-subject-box" class="hidden">
+  <input id="modify-subject-name" type="text" placeholder="Subject name" />
 
-      <button onclick="saveModifiedSubject()">
-        Save Name
-      </button>
-
-      <button id="toggle-subject-status-btn" onclick="toggleSelectedSubjectStatus()">
-        Change Status
-      </button>
+  <div class="status-action-row">
+    <div id="selected-subject-status" class="status-display">
+      STATUS: -
     </div>
+
+    <button
+      id="toggle-subject-status-btn"
+      class="status-toggle-btn"
+      onclick="toggleSubjectStatusLocal()"
+    >
+      Change Status
+    </button>
+  </div>
+
+  <button class="save-btn" onclick="saveSubjectChanges()">
+    Save These Changes
+  </button>
+</div>
   </div>
 </section>
 

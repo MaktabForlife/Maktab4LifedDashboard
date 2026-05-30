@@ -159,23 +159,50 @@
       <div id="progress-output" class="list-stack"></div>
     </section>
 
+
+
     
     <section id="subjects-screen" class="screen admin-theme">
-  <div class="nav-header">
-    <h2>Subjects</h2>
+         <div class="nav-header">
+            <h2>Subjects</h2>
     <button class="small-btn" onclick="showScreen('admin-academics')">Back</button>
   </div>
 
-  <div id="subject-form" class="dashboard-section">
-    <h3>Add Subject</h3>
-    <input id="new-subject-name" type="text" placeholder="Subject name" />
-    <button onclick="createSubjectFromUI()">Add Subject</button>
+  <div class="dashboard-section subject-panel">
+       <h3>Add Subjects</h3>
+
+        <div id="subject-add-list" class="subject-add-list"></div>
+
+       <button id="submit-subjects-btn" class="save-btn hidden" onclick="submitPendingSubjects()">
+      Submit Subjects
+    </button>
+
+    <p id="subject-add-message" class="helper-text"></p>
   </div>
 
-  <div id="subjects-list" class="list-stack">
-    <p class="helper-text">Loading subjects...</p>
+  <div class="dashboard-section subject-panel">
+    <h3>Modify Subject</h3>
+
+    <select id="modify-subject-select" onchange="selectSubjectToModify()">
+      <option value="">Select subject...</option>
+    </select>
+
+    <div id="modify-subject-box" class="hidden">
+      <input id="modify-subject-name" type="text" placeholder="Subject name" />
+
+      <button onclick="saveModifiedSubject()">
+        Save Name
+      </button>
+
+      <button id="toggle-subject-status-btn" onclick="toggleSelectedSubjectStatus()">
+        Change Status
+      </button>
+    </div>
   </div>
 </section>
+
+
+    
 
     
     <!-- PLACEHOLDER SCREEN -->

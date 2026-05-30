@@ -225,10 +225,17 @@ function showAdminAcademics() {
    STUDENT TASK VIEW
 ========================= */
 
-async function showStudentTasks() {
-  showScreen("student-tasks");
+let studentSubjectTaskGroups = {};
+let currentStudentSubjectKey = "";
 
-  const container = document.getElementById("student-task-list");
+async function showStudentTasks() {
+  setProgressScreensForStudent();
+  showScreen("progress-subjects-screen");
+
+  const title = document.getElementById("progress-subjects-title");
+  const container = document.getElementById("progress-subjects-list");
+
+  title.innerText = "My Task Progress";
   container.innerHTML = `<p class="helper-text">Loading tasks...</p>`;
 
   const result = await apiPost("/api/tasks/student", {
@@ -245,60 +252,177 @@ async function showStudentTasks() {
     return;
   }
 
-  const grouped = groupTasksBySubject(result.tasks);
+  studentSubjectTaskGroups = buildStudentSubjectTaskGroups(result.tasks);
+  renderStudentSubjectProgress();
+}
 
-  let html = "";
+function setProgressScreensForStudent() {
+  ["progress-subjects-screen", "progress-tasks-screen"].forEach(id => {
+    const screen = document.getElementById(id);
+    if (!screen) return;
+    screen.classList.remove("admin-theme");
+    screen.classList.add("student-theme");
+  });
 
-  Object.keys(grouped).forEach(subjectName => {
-    const subjectTasks = grouped[subjectName];
-    const completed = subjectTasks.filter(t => t.completestatus).length;
-    const verified = subjectTasks.filter(t => t.verifystatus).length;
-    const total = subjectTasks.length;
+  const subjectBackButton = document.querySelector("#progress-subjects-screen .small-btn");
+  if (subjectBackButton) {
+    subjectBackButton.setAttribute("onclick", "showScreen('student-home')");
+  }
 
-    const percentComplete = total === 0 ? 0 : Math.round((completed / total) * 100);
-    const percentVerified = total === 0 ? 0 : Math.round((verified / total) * 100);
+  const taskBackButton = document.querySelector("#progress-tasks-screen .small-btn");
+  if (taskBackButton) {
+    taskBackButton.setAttribute("onclick", "showStudentTasks()");
+  }
+}
 
-    html += `
-      <div class="subject-heading">
-        ${escapeHtml(subjectName)}
-      </div>
+function setProgressScreensForAdmin() {
+  ["progress-subjects-screen", "progress-tasks-screen", "progress-task-students-screen"].forEach(id => {
+    const screen = document.getElementById(id);
+    if (!screen) return;
+    screen.classList.remove("student-theme");
+    screen.classList.add("admin-theme");
+  });
 
-      <div class="mini-progress-box">
-        ${renderProgressBars(percentComplete, percentVerified)}
-      </div>
-    `;
+  const subjectBackButton = document.querySelector("#progress-subjects-screen .small-btn");
+  if (subjectBackButton) {
+    subjectBackButton.setAttribute("onclick", "showScreen('progress-report')");
+  }
 
-    subjectTasks.forEach(task => {
-      const isComplete = !!task.completestatus;
-      const isVerified = !!task.verifystatus;
+  const taskBackButton = document.querySelector("#progress-tasks-screen .small-btn");
+  if (taskBackButton) {
+    taskBackButton.setAttribute("onclick", "showScreen('progress-subjects-screen')");
+  }
 
-      html += `
-        <div class="task-card">
-          <div class="task-title">${escapeHtml(task.taskname)}</div>
+  const taskStudentsBackButton = document.querySelector("#progress-task-students-screen .small-btn");
+  if (taskStudentsBackButton) {
+    taskStudentsBackButton.setAttribute("onclick", "showScreen('progress-tasks-screen')");
+  }
+}
 
-          <div class="task-status-row">
-            <span class="status-pill">
-              ${isComplete ? "COMPLETE" : "TO BE COMPLETED"}
-            </span>
+function buildStudentSubjectTaskGroups(tasks) {
+  const groups = {};
 
-            <span class="status-pill">
-              ${isVerified ? "VERIFIED" : "NOT VERIFIED"}
-            </span>
-          </div>
+  [...tasks].sort(sortByTaskId).forEach(task => {
+    const subjectName = task.subjectname || "Other";
+    const subjectKey = task.subjectid || subjectName;
 
-          ${renderTaskLinks(task)}
+    if (!groups[subjectKey]) {
+      groups[subjectKey] = {
+        subjectid: task.subjectid || subjectKey,
+        subjectname: subjectName,
+        tasks: []
+      };
+    }
 
-          <div class="task-actions">
-            <button onclick="toggleStudentTask('${task.studenttaskid}', ${isComplete ? "false" : "true"})">
-              ${isComplete ? "Mark Not Complete" : "Mark Complete"}
-            </button>
-          </div>
-        </div>
-      `;
+    groups[subjectKey].tasks.push(task);
+  });
+
+  return groups;
+}
+
+function renderStudentSubjectProgress() {
+  const container = document.getElementById("progress-subjects-list");
+  const subjects = Object.values(studentSubjectTaskGroups).sort((a, b) => {
+    return String(a.subjectname || "").localeCompare(String(b.subjectname || ""), undefined, {
+      numeric: true,
+      sensitivity: "base"
     });
   });
 
-  container.innerHTML = html;
+  if (subjects.length === 0) {
+    container.innerHTML = `<p class="helper-text">No tasks assigned yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = subjects.map(subject => {
+    const total = subject.tasks.length;
+    const completed = subject.tasks.filter(task => isStatusOn(task.completestatus)).length;
+    const percentComplete = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+    return `
+      <button class="progress-list-button" onclick="openStudentSubjectTasks('${escapeForAttribute(subject.subjectid)}')">
+        <span class="progress-list-title">${escapeHtml(subject.subjectname)}</span>
+        ${renderCompleteProgressBar(percentComplete)}
+      </button>
+    `;
+  }).join("");
+}
+
+function openStudentSubjectTasks(subjectKey) {
+  setProgressScreensForStudent();
+
+  const subject = studentSubjectTaskGroups[subjectKey];
+
+  if (!subject) {
+    alert("Subject not found. Please reload your tasks.");
+    return;
+  }
+
+  currentStudentSubjectKey = subjectKey;
+  document.getElementById("progress-tasks-title").innerText = subject.subjectname;
+  showScreen("progress-tasks-screen");
+  renderStudentSubjectTaskList();
+}
+
+function renderStudentSubjectTaskList() {
+  const container = document.getElementById("progress-tasks-list");
+  const subject = studentSubjectTaskGroups[currentStudentSubjectKey];
+
+  if (!subject || subject.tasks.length === 0) {
+    container.innerHTML = `<p class="helper-text">No tasks found for this subject.</p>`;
+    return;
+  }
+
+  const rows = [...subject.tasks].sort(sortByTaskId);
+
+  container.innerHTML = rows.map(task => {
+    const isComplete = isStatusOn(task.completestatus);
+    const isVerified = isStatusOn(task.verifystatus);
+
+    return `
+      <div class="student-status-row">
+        <div class="student-status-name">${escapeHtml(task.taskname)}</div>
+
+        <div class="status-action" onclick="toggleStudentSubjectTask('${task.studenttaskid}', ${isComplete ? "false" : "true"})">
+          ${
+            isComplete
+              ? `<span class="status-tick status-tick-complete">✓</span>`
+              : `To be completed`
+          }
+        </div>
+
+        <div class="status-action">
+          ${
+            isVerified
+              ? `<span class="status-tick status-tick-verified">✓</span>`
+              : `To be verified`
+          }
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function toggleStudentSubjectTask(studenttaskid, complete) {
+  const result = await apiPost("/api/tasks/update-complete", {
+    studenttaskid,
+    complete
+  }, state.token);
+
+  if (!result.success) {
+    alert(result.error || "Could not update task.");
+    return;
+  }
+
+  Object.values(studentSubjectTaskGroups).forEach(subject => {
+    subject.tasks.forEach(task => {
+      if (String(task.studenttaskid) === String(studenttaskid)) {
+        task.completestatus = complete ? "YES" : "";
+      }
+    });
+  });
+
+  renderStudentSubjectTaskList();
 }
 
 async function toggleStudentTask(studenttaskid, complete) {
@@ -600,6 +724,7 @@ let progressPendingUpdates = {};
 let currentProgressRows = [];
 
 async function showProgressReport() {
+  setProgressScreensForAdmin();
   showScreen("progress-report");
   await loadProgressSelectors();
 }
@@ -805,7 +930,7 @@ async function loadProgressTasks() {
     return;
   }
 
-  const sortedTasks = [...result.tasks].sort(sortByTaskIdAsc);
+  const sortedTasks = [...result.tasks].sort(sortByTaskId);
 
   container.innerHTML = sortedTasks.map(task => `
     <button class="progress-list-button" onclick="openProgressTask('${task.taskid}', '${escapeForAttribute(task.taskname)}')">
@@ -971,7 +1096,7 @@ function renderIndividualStudentTaskList(rows) {
     .forEach(subjectName => {
       html += `<div class="group-heading">${escapeHtml(subjectName)}</div>`;
 
-      bySubject[subjectName].sort(sortByTaskIdAsc).forEach(row => {
+      [...bySubject[subjectName]].sort(sortByTaskId).forEach(row => {
         const pending = progressPendingUpdates[row.studenttaskid] || {};
 
         const completeStatus = pending.completeStatus !== undefined
@@ -1083,21 +1208,6 @@ async function saveProgressPendingChanges() {
    HELPERS
 ========================= */
 
-
-function getTaskIdValue(task) {
-  return task.taskid ?? task.taskID ?? task.TaskID ?? task.taskId ?? "";
-}
-
-function sortByTaskIdAsc(a, b) {
-  const aId = String(getTaskIdValue(a)).trim();
-  const bId = String(getTaskIdValue(b)).trim();
-
-  return aId.localeCompare(bId, undefined, {
-    numeric: true,
-    sensitivity: "base"
-  });
-}
-
 function groupTasksBySubject(tasks) {
   const grouped = {};
 
@@ -1112,10 +1222,54 @@ function groupTasksBySubject(tasks) {
   });
 
   Object.keys(grouped).forEach(subjectName => {
-    grouped[subjectName].sort(sortByTaskIdAsc);
+    grouped[subjectName].sort(sortByTaskId);
   });
 
   return grouped;
+}
+
+function sortByTaskId(a, b) {
+  const aRaw = a.taskid || a.taskID || a.TaskID || "";
+  const bRaw = b.taskid || b.taskID || b.TaskID || "";
+  const aNum = Number(aRaw);
+  const bNum = Number(bRaw);
+
+  if (!Number.isNaN(aNum) && !Number.isNaN(bNum) && aNum !== bNum) {
+    return aNum - bNum;
+  }
+
+  const idCompare = String(aRaw).localeCompare(String(bRaw), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+
+  if (idCompare !== 0) return idCompare;
+
+  return String(a.taskname || "").localeCompare(String(b.taskname || ""), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
+function isStatusOn(value) {
+  if (value === true) return true;
+  const text = String(value || "").trim().toLowerCase();
+  return text === "yes" || text === "true" || text === "complete" || text === "verified" || text === "1";
+}
+
+function renderCompleteProgressBar(completedPercent) {
+  const completeWidth = Math.max(0, Math.min(100, Number(completedPercent) || 0));
+
+  return `
+    <span class="progress-bars">
+      <span class="progress-bar-row">
+        <span class="progress-bar-label">Complete</span>
+        <span class="progress-track">
+          <span class="progress-fill progress-fill-complete" style="width:${completeWidth}%"></span>
+        </span>
+      </span>
+    </span>
+  `;
 }
 
 function renderProgressBars(completedPercent, verifiedPercent) {

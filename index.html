@@ -146,19 +146,68 @@
     </section>
 
     <!-- PROGRESS REPORT -->
-    <section id="progress-report" class="screen admin-theme">
-      <div class="nav-header">
-        <h2>Progress</h2>
-        <button class="small-btn" onclick="showScreen('admin-academics')">Back</button>
-      </div>
+<section id="progress-report" class="screen admin-theme">
+  <div class="nav-header">
+    <h2>Progress</h2>
+    <button class="small-btn" onclick="showScreen('admin-academics')">Back</button>
+  </div>
 
-      <div class="dashboard-section">
-        <button class="list-btn" onclick="loadProgressReport()">Load Full Report</button>
-      </div>
+  <div class="dashboard-section">
+    <h3>Class Progress</h3>
+    <button class="list-btn" onclick="openProgressContext('class', 'ALL')">
+      View Full Class
+    </button>
+  </div>
 
-      <div id="progress-output" class="list-stack"></div>
-    </section>
+  <div class="dashboard-section">
+    <h3>Group Progress</h3>
+    <select id="progress-group-select">
+      <option value="">Select a Group...</option>
+    </select>
+    <button class="list-btn" onclick="openSelectedGroupProgress()">
+      View Group
+    </button>
+  </div>
 
+  <div class="dashboard-section">
+    <h3>Individual Progress</h3>
+    <select id="progress-student-select">
+      <option value="">Select a Student...</option>
+    </select>
+    <button class="list-btn" onclick="openSelectedStudentProgress()">
+      View Student
+    </button>
+  </div>
+</section>
+
+<section id="progress-subjects-screen" class="screen admin-theme">
+  <div class="nav-header">
+    <h2 id="progress-subjects-title">Subjects</h2>
+    <button class="small-btn" onclick="showScreen('progress-report')">Back</button>
+  </div>
+
+  <div id="progress-subjects-list" class="list-stack"></div>
+</section>
+
+<section id="progress-tasks-screen" class="screen admin-theme">
+  <div class="nav-header">
+    <h2 id="progress-tasks-title">Tasks</h2>
+    <button class="small-btn" onclick="showScreen('progress-subjects-screen')">Back</button>
+  </div>
+
+  <div id="progress-tasks-list" class="list-stack"></div>
+</section>
+
+<section id="progress-task-students-screen" class="screen admin-theme">
+  <div class="nav-header">
+    <h2 id="progress-task-students-title">Task</h2>
+    <button class="small-btn" onclick="showScreen('progress-tasks-screen')">Back</button>
+  </div>
+
+  <div id="progress-task-students-list" class="list-stack"></div>
+</section>
+
+    
 
 
     

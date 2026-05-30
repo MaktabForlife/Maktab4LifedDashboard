@@ -332,7 +332,41 @@ button:active {
   margin-top: 12px;
 }
 
+.status-action-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin: 12px 0;
+}
 
+.status-display {
+  background: #e5e4e2;
+  color: #333;
+  border-radius: 12px;
+  padding: 12px;
+  font-weight: bold;
+  text-align: left;
+  font-size: 0.95rem;
+}
+
+.status-toggle-btn {
+  width: auto;
+  min-width: 130px;
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 420px) {
+  .status-action-row {
+    grid-template-columns: 1fr;
+  }
+
+  .status-toggle-btn {
+    width: 100%;
+  }
+}
 
 
 

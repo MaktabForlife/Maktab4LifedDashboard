@@ -252,8 +252,11 @@ async function showStudentTasks() {
   Object.keys(grouped).forEach(subjectName => {
     const subjectTasks = grouped[subjectName];
     const completed = subjectTasks.filter(t => t.completestatus).length;
+    const verified = subjectTasks.filter(t => t.verifystatus).length;
     const total = subjectTasks.length;
-    const percentDone = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+    const percentComplete = total === 0 ? 0 : Math.round((completed / total) * 100);
+    const percentVerified = total === 0 ? 0 : Math.round((verified / total) * 100);
 
     html += `
       <div class="subject-heading">
@@ -261,11 +264,7 @@ async function showStudentTasks() {
       </div>
 
       <div class="mini-progress-box">
-        <div class="mini-progress-number">${percentDone}%</div>
-        <div class="mini-text">Completed</div>
-        <div class="progress-bar-wrap">
-          <div class="progress-bar-fill" style="width:${percentDone}%"></div>
-        </div>
+        ${renderProgressBars(percentComplete, percentVerified)}
       </div>
     `;
 
@@ -768,10 +767,7 @@ async function loadProgressSubjects() {
   container.innerHTML = result.subjects.map(subject => `
     <button class="progress-list-button" onclick="openProgressSubject('${subject.subjectid}', '${escapeForAttribute(subject.subjectname)}')">
       <span class="progress-list-title">${escapeHtml(subject.subjectname)}</span>
-      <span class="progress-indicators">
-        <span class="progress-pill">${subject.completedPercent}% Complete</span>
-        <span class="progress-pill">${subject.verifiedPercent}% Verified</span>
-      </span>
+      ${renderProgressBars(subject.completedPercent, subject.verifiedPercent)}
     </button>
   `).join("");
 }
@@ -812,10 +808,7 @@ async function loadProgressTasks() {
   container.innerHTML = result.tasks.map(task => `
     <button class="progress-list-button" onclick="openProgressTask('${task.taskid}', '${escapeForAttribute(task.taskname)}')">
       <span class="progress-list-title">${escapeHtml(task.taskname)}</span>
-      <span class="progress-indicators">
-        <span class="progress-pill">${task.completedPercent}% Complete</span>
-        <span class="progress-pill">${task.verifiedPercent}% Verified</span>
-      </span>
+      ${renderProgressBars(task.completedPercent, task.verifiedPercent)}
     </button>
   `).join("");
 }
@@ -901,7 +894,7 @@ function renderProgressTaskStudents(rows) {
           <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
             ${
               isComplete
-                ? `<span class="status-tick">✓</span>`
+                ? `<span class="status-tick status-tick-complete">✓</span>`
                 : `To be completed`
             }
           </div>
@@ -909,7 +902,7 @@ function renderProgressTaskStudents(rows) {
           <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
             ${
               isVerified
-                ? `<span class="status-tick">✓</span>`
+                ? `<span class="status-tick status-tick-verified">✓</span>`
                 : `To be verified`
             }
           </div>
@@ -997,7 +990,7 @@ function renderIndividualStudentTaskList(rows) {
             <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
               ${
                 isComplete
-                  ? `<span class="status-tick">✓</span>`
+                  ? `<span class="status-tick status-tick-complete">✓</span>`
                   : `To be completed`
               }
             </div>
@@ -1005,7 +998,7 @@ function renderIndividualStudentTaskList(rows) {
             <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
               ${
                 isVerified
-                  ? `<span class="status-tick">✓</span>`
+                  ? `<span class="status-tick status-tick-verified">✓</span>`
                   : `To be verified`
               }
             </div>
@@ -1108,6 +1101,29 @@ function groupTasksBySubject(tasks) {
   });
 
   return grouped;
+}
+
+function renderProgressBars(completedPercent, verifiedPercent) {
+  const completeWidth = Math.max(0, Math.min(100, Number(completedPercent) || 0));
+  const verifiedWidth = Math.max(0, Math.min(100, Number(verifiedPercent) || 0));
+
+  return `
+    <span class="progress-bars">
+      <span class="progress-bar-row">
+        <span class="progress-bar-label">Complete</span>
+        <span class="progress-track">
+          <span class="progress-fill progress-fill-complete" style="width:${completeWidth}%"></span>
+        </span>
+      </span>
+
+      <span class="progress-bar-row">
+        <span class="progress-bar-label">Verified</span>
+        <span class="progress-track">
+          <span class="progress-fill progress-fill-verified" style="width:${verifiedWidth}%"></span>
+        </span>
+      </span>
+    </span>
+  `;
 }
 
 function renderTaskLinks(task) {

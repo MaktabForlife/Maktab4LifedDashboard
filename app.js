@@ -8,6 +8,10 @@ const state = {
   user: null
 };
 
+/* =========================
+   APP INIT
+========================= */
+
 window.addEventListener("load", initApp);
 
 function initApp() {
@@ -38,7 +42,11 @@ function showScreen(id) {
     screen.classList.remove("active");
   });
 
-  document.getElementById(id).classList.add("active");
+  const target = document.getElementById(id);
+
+  if (target) {
+    target.classList.add("active");
+  }
 }
 
 function setError(message) {
@@ -62,6 +70,10 @@ async function apiPost(path, body = {}, token = "") {
 
   return response.json();
 }
+
+/* =========================
+   AUTH
+========================= */
 
 async function checkStudent() {
   try {
@@ -209,6 +221,10 @@ function showAdminAcademics() {
   showScreen("admin-academics");
 }
 
+/* =========================
+   STUDENT TASK VIEW
+========================= */
+
 async function showStudentTasks() {
   showScreen("student-tasks");
 
@@ -224,7 +240,7 @@ async function showStudentTasks() {
     return;
   }
 
-  if (result.tasks.length === 0) {
+  if (!result.tasks || result.tasks.length === 0) {
     container.innerHTML = `<p class="helper-text">No tasks assigned yet.</p>`;
     return;
   }
@@ -286,9 +302,6 @@ async function showStudentTasks() {
   container.innerHTML = html;
 }
 
-
-
-
 async function toggleStudentTask(studenttaskid, complete) {
   const result = await apiPost("/api/tasks/update-complete", {
     studenttaskid,
@@ -303,439 +316,9 @@ async function toggleStudentTask(studenttaskid, complete) {
   showStudentTasks();
 }
 
-const progressState = {
-  contextType: null,
-  classgroup: "ALL",
-  studentid: "ALL",
-  subjectid: "ALL",
-  subjectname: "",
-  taskid: "ALL",
-  taskname: ""
-};
-
-async function showProgressReport() {
-  showScreen("progress-report");
-  await loadProgressSelectors();
-}
-
-async function loadProgressSelectors() {
-  const result = await apiPost("/api/progress/task-detail", {
-    studentid: "ALL",
-    classgroup: "ALL",
-    subjectid: "ALL",
-    taskid: "ALL"
-  }, state.token);
-
-  if (!result.success) {
-    alert(result.error || "Could not load progress data.");
-    return;
-  }
-
-  const groupSelect = document.getElementById("progress-group-select");
-  const studentSelect = document.getElementById("progress-student-select");
-
-  const groups = [...new Set(result.students.map(s => s.classgroup))]
-    .filter(Boolean)
-    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
-
-  groupSelect.innerHTML = `<option value="">Select a Group...</option>`;
-  groups.forEach(group => {
-    const option = document.createElement("option");
-    option.value = group;
-    option.textContent = group;
-    groupSelect.appendChild(option);
-  });
-
-  const studentsMap = {};
-
-  result.students.forEach(row => {
-    if (!studentsMap[row.studentid]) {
-      studentsMap[row.studentid] = {
-        studentid: row.studentid,
-        username: row.username,
-        classgroup: row.classgroup
-      };
-    }
-  });
-
-  const students = Object.values(studentsMap).sort((a, b) => {
-    const groupCompare = String(a.classgroup).localeCompare(String(b.classgroup), undefined, { numeric: true });
-    if (groupCompare !== 0) return groupCompare;
-    return String(a.username).localeCompare(String(b.username));
-  });
-
-  studentSelect.innerHTML = `<option value="">Select a Student...</option>`;
-
-  let currentGroup = "";
-  let optgroup = null;
-
-  students.forEach(student => {
-    if (student.classgroup !== currentGroup) {
-      currentGroup = student.classgroup;
-      optgroup = document.createElement("optgroup");
-      optgroup.label = currentGroup;
-      studentSelect.appendChild(optgroup);
-    }
-
-    const option = document.createElement("option");
-    option.value = student.studentid;
-    option.textContent = student.username;
-    optgroup.appendChild(option);
-  });
-}
-
-function openSelectedGroupProgress() {
-  const group = document.getElementById("progress-group-select").value;
-
-  if (!group) {
-    alert("Select a group first.");
-    return;
-  }
-
-  openProgressContext("group", group);
-}
-
-function openSelectedStudentProgress() {
-  const studentid = document.getElementById("progress-student-select").value;
-
-  if (!studentid) {
-    alert("Select a student first.");
-    return;
-  }
-
-  openProgressContext("student", studentid);
-}
-
-async function openProgressContext(type, value) {
-  progressState.contextType = type;
-  progressState.subjectid = "ALL";
-  progressState.taskid = "ALL";
-
-  if (type === "class") {
-    progressState.classgroup = "ALL";
-    progressState.studentid = "ALL";
-    document.getElementById("progress-subjects-title").innerText = "Class Subjects";
-  }
-
-  if (type === "group") {
-    progressState.classgroup = value;
-    progressState.studentid = "ALL";
-    document.getElementById("progress-subjects-title").innerText = `${value} Subjects`;
-  }
-
-  if (type === "student") {
-    progressState.classgroup = "ALL";
-    progressState.studentid = value;
-
-    const selectedOption = document.querySelector(`#progress-student-select option[value="${CSS.escape(value)}"]`);
-    const name = selectedOption ? selectedOption.textContent : "Student";
-
-    document.getElementById("progress-subjects-title").innerText = `${name}'s Subjects`;
-  }
-
-  await loadProgressSubjects();
-}
-
-async function loadProgressSubjects() {
-  showScreen("progress-subjects-screen");
-
-  const container = document.getElementById("progress-subjects-list");
-  container.innerHTML = `<p class="helper-text">Loading subjects...</p>`;
-
-  const result = await apiPost("/api/progress/task-detail", {
-    studentid: progressState.studentid,
-    classgroup: progressState.classgroup,
-    subjectid: "ALL",
-    taskid: "ALL"
-  }, state.token);
-
-  if (!result.success) {
-    container.innerHTML = `<p class="error-message">${result.error || "Could not load subjects."}</p>`;
-    return;
-  }
-
-  if (result.subjects.length === 0) {
-    container.innerHTML = `<p class="helper-text">No assigned subjects found.</p>`;
-    return;
-  }
-
-  container.innerHTML = result.subjects.map(subject => `
-    <button class="progress-list-button" onclick="openProgressSubject('${subject.subjectid}', '${escapeForAttribute(subject.subjectname)}')">
-      <span class="progress-list-title">${escapeHtml(subject.subjectname)}</span>
-      <span class="progress-indicators">
-        <span class="progress-pill">${subject.completedPercent}% Complete</span>
-        <span class="progress-pill">${subject.verifiedPercent}% Verified</span>
-      </span>
-    </button>
-  `).join("");
-}
-
-async function openProgressSubject(subjectid, subjectname) {
-  progressState.subjectid = subjectid;
-  progressState.subjectname = subjectname;
-  progressState.taskid = "ALL";
-
-  document.getElementById("progress-tasks-title").innerText = subjectname;
-
-  await loadProgressTasks();
-}
-
-async function loadProgressTasks() {
-  showScreen("progress-tasks-screen");
-
-  const container = document.getElementById("progress-tasks-list");
-  container.innerHTML = `<p class="helper-text">Loading tasks...</p>`;
-
-  const result = await apiPost("/api/progress/task-detail", {
-    studentid: progressState.studentid,
-    classgroup: progressState.classgroup,
-    subjectid: progressState.subjectid,
-    taskid: "ALL"
-  }, state.token);
-
-  if (!result.success) {
-    container.innerHTML = `<p class="error-message">${result.error || "Could not load tasks."}</p>`;
-    return;
-  }
-
-  if (result.tasks.length === 0) {
-    container.innerHTML = `<p class="helper-text">No tasks found.</p>`;
-    return;
-  }
-
-  container.innerHTML = result.tasks.map(task => `
-    <button class="progress-list-button" onclick="openProgressTask('${task.taskid}', '${escapeForAttribute(task.taskname)}')">
-      <span class="progress-list-title">${escapeHtml(task.taskname)}</span>
-      <span class="progress-indicators">
-        <span class="progress-pill">${task.completedPercent}% Complete</span>
-        <span class="progress-pill">${task.verifiedPercent}% Verified</span>
-      </span>
-    </button>
-  `).join("");
-}
-
-async function openProgressTask(taskid, taskname) {
-  progressState.taskid = taskid;
-  progressState.taskname = taskname;
-
-  document.getElementById("progress-task-students-title").innerText = taskname;
-
-  await loadProgressTaskStudents();
-}
-
-async function loadProgressTaskStudents() {
-  showScreen("progress-task-students-screen");
-
-  const container = document.getElementById("progress-task-students-list");
-  container.innerHTML = `<p class="helper-text">Loading students...</p>`;
-
-  const result = await apiPost("/api/progress/task-detail", {
-    studentid: progressState.studentid,
-    classgroup: progressState.classgroup,
-    subjectid: progressState.subjectid,
-    taskid: progressState.taskid
-  }, state.token);
-
-  if (!result.success) {
-    container.innerHTML = `<p class="error-message">${result.error || "Could not load students."}</p>`;
-    return;
-  }
-
-  if (result.students.length === 0) {
-    container.innerHTML = `<p class="helper-text">No student tasks found.</p>`;
-    return;
-  }
-
-  const byGroup = {};
-
-  result.students.forEach(row => {
-    if (!byGroup[row.classgroup]) {
-      byGroup[row.classgroup] = [];
-    }
-
-    byGroup[row.classgroup].push(row);
-  });
-
-  const groups = Object.keys(byGroup).sort((a, b) => {
-    return String(a).localeCompare(String(b), undefined, { numeric: true });
-  });
-
-  let html = "";
-
-  groups.forEach(group => {
-    html += `<div class="group-heading">${escapeHtml(group)}</div>`;
-
-    byGroup[group].forEach(row => {
-      const isComplete = !!row.completestatus;
-      const isVerified = !!row.verifystatus;
-
-      html += `
-        <div class="student-status-row">
-          <div class="student-status-name">${escapeHtml(row.username)}</div>
-
-          <div class="status-action" onclick="teacherToggleCompleteFromProgress('${row.studenttaskid}', ${isComplete ? "false" : "true"})">
-            ${
-              isComplete
-                ? `<span class="status-tick">✓</span>`
-                : `To be completed`
-            }
-          </div>
-
-          <div class="status-action" onclick="teacherToggleVerifiedFromProgress('${row.studenttaskid}', ${isVerified ? "false" : "true"})">
-            ${
-              isVerified
-                ? `<span class="status-tick">✓</span>`
-                : `To be verified`
-            }
-          </div>
-        </div>
-      `;
-    });
-  });
-
-  container.innerHTML = html;
-}
-
-async function teacherToggleCompleteFromProgress(studenttaskid, complete) {
-  const result = await apiPost("/api/tasks/update-complete", {
-    studenttaskid,
-    complete
-  }, state.token);
-
-  if (!result.success) {
-    alert(result.error || "Could not update completion.");
-    return;
-  }
-
-  await loadProgressTaskStudents();
-}
-
-async function teacherToggleVerifiedFromProgress(studenttaskid, verified) {
-  const result = await apiPost("/api/admin/tasks/verify", {
-    studenttaskid,
-    verified
-  }, state.token);
-
-  if (!result.success) {
-    alert(result.error || "Could not update verification.");
-    return;
-  }
-
-  await loadProgressTaskStudents();
-}
-
-
-
-
-async function openTeacherStudentTasks(studentid, username) {
-  showScreen("teacher-student-tasks");
-
-  document.getElementById("teacher-student-tasks-title").innerText =
-    username ? `${username}'s Tasks` : "Student Tasks";
-
-  const container = document.getElementById("teacher-student-task-list");
-  container.innerHTML = `<p class="helper-text">Loading tasks...</p>`;
-
-  const result = await apiPost("/api/tasks/student", {
-    studentid,
-    subjectid: "ALL"
-  }, state.token);
-
-  if (!result.success) {
-    container.innerHTML = `<p class="error-message">${result.error || "Failed to load tasks"}</p>`;
-    return;
-  }
-
-  if (result.tasks.length === 0) {
-    container.innerHTML = `<p class="helper-text">No tasks assigned to this student.</p>`;
-    return;
-  }
-
-  const grouped = groupTasksBySubject(result.tasks);
-
-  let html = "";
-
-  Object.keys(grouped).forEach(subjectName => {
-    html += `
-      <div class="subject-heading">
-        ${escapeHtml(subjectName)}
-      </div>
-    `;
-
-    grouped[subjectName].forEach(task => {
-      const isComplete = !!task.completestatus;
-      const isVerified = !!task.verifystatus;
-
-      html += `
-        <div class="task-card admin-task-card">
-          <div class="task-title">${escapeHtml(task.taskname)}</div>
-
-          <div class="task-status-row">
-            <span class="status-pill">
-              ${isComplete ? "COMPLETE" : "TO BE COMPLETED"}
-            </span>
-
-            <span class="status-pill">
-              ${isVerified ? "VERIFIED" : "NOT VERIFIED"}
-            </span>
-          </div>
-
-          ${renderTaskLinks(task)}
-
-          <div class="task-actions">
-            <button onclick="teacherToggleComplete('${task.studenttaskid}', ${isComplete ? "false" : "true"}, '${studentid}', '${escapeForAttribute(username)}')">
-              ${isComplete ? "Mark Not Complete" : "Mark Complete"}
-            </button>
-
-            <button onclick="teacherToggleVerified('${task.studenttaskid}', ${isVerified ? "false" : "true"}, '${studentid}', '${escapeForAttribute(username)}')">
-              ${isVerified ? "Unverify" : "Verify"}
-            </button>
-          </div>
-        </div>
-      `;
-    });
-  });
-
-  container.innerHTML = html;
-}
-
-async function teacherToggleComplete(studenttaskid, complete, studentid, username) {
-  const result = await apiPost("/api/tasks/update-complete", {
-    studenttaskid,
-    complete
-  }, state.token);
-
-  if (!result.success) {
-    alert(result.error || "Could not update task.");
-    return;
-  }
-
-  openTeacherStudentTasks(studentid, username);
-}
-
-async function teacherToggleVerified(studenttaskid, verified, studentid, username) {
-  const result = await apiPost("/api/admin/tasks/verify", {
-    studenttaskid,
-    verified
-  }, state.token);
-
-  if (!result.success) {
-    alert(result.error || "Could not verify task.");
-    return;
-  }
-
-  openTeacherStudentTasks(studentid, username);
-}
-
-function escapeForAttribute(value) {
-  return String(value || "")
-    .replaceAll("\\", "\\\\")
-    .replaceAll("'", "\\'")
-    .replaceAll('"', "&quot;");
-}
-
-
-
+/* =========================
+   SUBJECTS UI
+========================= */
 
 let allSubjects = [];
 let pendingSubjects = [];
@@ -1000,14 +583,510 @@ async function saveSubjectChanges() {
   selectedSubjectDraftActive = null;
 }
 
-function normalizeClientText(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/g, "");
+/* =========================
+   TEACHER / ADMIN PROGRESS DRILLDOWN
+========================= */
+
+const progressState = {
+  contextType: null,
+  classgroup: "ALL",
+  studentid: "ALL",
+  subjectid: "ALL",
+  subjectname: "",
+  taskid: "ALL",
+  taskname: ""
+};
+
+let progressPendingUpdates = {};
+let currentProgressRows = [];
+
+async function showProgressReport() {
+  showScreen("progress-report");
+  await loadProgressSelectors();
 }
+
+async function loadProgressSelectors() {
+  const result = await apiPost("/api/progress/task-detail", {
+    studentid: "ALL",
+    classgroup: "ALL",
+    subjectid: "ALL",
+    taskid: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    alert(result.error || "Could not load progress data.");
+    return;
+  }
+
+  const groupSelect = document.getElementById("progress-group-select");
+  const studentSelect = document.getElementById("progress-student-select");
+
+  const groups = [...new Set(result.students.map(s => s.classgroup))]
+    .filter(Boolean)
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+
+  groupSelect.innerHTML = `<option value="">Select a Group...</option>`;
+
+  groups.forEach(group => {
+    const option = document.createElement("option");
+    option.value = group;
+    option.textContent = group;
+    groupSelect.appendChild(option);
+  });
+
+  const studentsMap = {};
+
+  result.students.forEach(row => {
+    if (!studentsMap[row.studentid]) {
+      studentsMap[row.studentid] = {
+        studentid: row.studentid,
+        username: row.username,
+        classgroup: row.classgroup
+      };
+    }
+  });
+
+  const students = Object.values(studentsMap).sort((a, b) => {
+    const groupCompare = String(a.classgroup).localeCompare(
+      String(b.classgroup),
+      undefined,
+      { numeric: true }
+    );
+
+    if (groupCompare !== 0) return groupCompare;
+
+    return String(a.username).localeCompare(String(b.username));
+  });
+
+  studentSelect.innerHTML = `<option value="">Select a Student...</option>`;
+
+  let currentGroup = "";
+  let optgroup = null;
+
+  students.forEach(student => {
+    if (student.classgroup !== currentGroup) {
+      currentGroup = student.classgroup;
+      optgroup = document.createElement("optgroup");
+      optgroup.label = currentGroup;
+      studentSelect.appendChild(optgroup);
+    }
+
+    const option = document.createElement("option");
+    option.value = student.studentid;
+    option.textContent = student.username;
+    optgroup.appendChild(option);
+  });
+}
+
+function openSelectedGroupProgress() {
+  const group = document.getElementById("progress-group-select").value;
+
+  if (!group) {
+    alert("Select a group first.");
+    return;
+  }
+
+  openProgressContext("group", group);
+}
+
+function openSelectedStudentProgress() {
+  const studentid = document.getElementById("progress-student-select").value;
+
+  if (!studentid) {
+    alert("Select a student first.");
+    return;
+  }
+
+  openProgressContext("student", studentid);
+}
+
+async function openProgressContext(type, value) {
+  progressState.contextType = type;
+  progressState.subjectid = "ALL";
+  progressState.taskid = "ALL";
+  progressPendingUpdates = {};
+  currentProgressRows = [];
+
+  if (type === "class") {
+    progressState.classgroup = "ALL";
+    progressState.studentid = "ALL";
+    document.getElementById("progress-subjects-title").innerText = "Class Subjects";
+    await loadProgressSubjects();
+    return;
+  }
+
+  if (type === "group") {
+    progressState.classgroup = value;
+    progressState.studentid = "ALL";
+    document.getElementById("progress-subjects-title").innerText = `${value} Subjects`;
+    await loadProgressSubjects();
+    return;
+  }
+
+  if (type === "student") {
+    progressState.classgroup = "ALL";
+    progressState.studentid = value;
+    progressState.subjectid = "ALL";
+    progressState.taskid = "ALL";
+
+    const selectedOption = document.querySelector(
+      `#progress-student-select option[value="${CSS.escape(value)}"]`
+    );
+
+    const name = selectedOption ? selectedOption.textContent : "Student";
+
+    document.getElementById("progress-task-students-title").innerText =
+      `${name}'s Tasks`;
+
+    await loadIndividualStudentTaskList();
+  }
+}
+
+async function loadProgressSubjects() {
+  showScreen("progress-subjects-screen");
+
+  const container = document.getElementById("progress-subjects-list");
+  container.innerHTML = `<p class="helper-text">Loading subjects...</p>`;
+
+  const result = await apiPost("/api/progress/task-detail", {
+    studentid: progressState.studentid,
+    classgroup: progressState.classgroup,
+    subjectid: "ALL",
+    taskid: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || "Could not load subjects."}</p>`;
+    return;
+  }
+
+  if (!result.subjects || result.subjects.length === 0) {
+    container.innerHTML = `<p class="helper-text">No assigned subjects found.</p>`;
+    return;
+  }
+
+  container.innerHTML = result.subjects.map(subject => `
+    <button class="progress-list-button" onclick="openProgressSubject('${subject.subjectid}', '${escapeForAttribute(subject.subjectname)}')">
+      <span class="progress-list-title">${escapeHtml(subject.subjectname)}</span>
+      <span class="progress-indicators">
+        <span class="progress-pill">${subject.completedPercent}% Complete</span>
+        <span class="progress-pill">${subject.verifiedPercent}% Verified</span>
+      </span>
+    </button>
+  `).join("");
+}
+
+async function openProgressSubject(subjectid, subjectname) {
+  progressState.subjectid = subjectid;
+  progressState.subjectname = subjectname;
+  progressState.taskid = "ALL";
+
+  document.getElementById("progress-tasks-title").innerText = subjectname;
+
+  await loadProgressTasks();
+}
+
+async function loadProgressTasks() {
+  showScreen("progress-tasks-screen");
+
+  const container = document.getElementById("progress-tasks-list");
+  container.innerHTML = `<p class="helper-text">Loading tasks...</p>`;
+
+  const result = await apiPost("/api/progress/task-detail", {
+    studentid: progressState.studentid,
+    classgroup: progressState.classgroup,
+    subjectid: progressState.subjectid,
+    taskid: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || "Could not load tasks."}</p>`;
+    return;
+  }
+
+  if (!result.tasks || result.tasks.length === 0) {
+    container.innerHTML = `<p class="helper-text">No tasks found.</p>`;
+    return;
+  }
+
+  container.innerHTML = result.tasks.map(task => `
+    <button class="progress-list-button" onclick="openProgressTask('${task.taskid}', '${escapeForAttribute(task.taskname)}')">
+      <span class="progress-list-title">${escapeHtml(task.taskname)}</span>
+      <span class="progress-indicators">
+        <span class="progress-pill">${task.completedPercent}% Complete</span>
+        <span class="progress-pill">${task.verifiedPercent}% Verified</span>
+      </span>
+    </button>
+  `).join("");
+}
+
+async function openProgressTask(taskid, taskname) {
+  progressState.taskid = taskid;
+  progressState.taskname = taskname;
+
+  document.getElementById("progress-task-students-title").innerText = taskname;
+
+  await loadProgressTaskStudents();
+}
+
+async function loadProgressTaskStudents() {
+  showScreen("progress-task-students-screen");
+
+  progressPendingUpdates = {};
+
+  const container = document.getElementById("progress-task-students-list");
+  container.innerHTML = `<p class="helper-text">Loading students...</p>`;
+
+  const result = await apiPost("/api/progress/task-detail", {
+    studentid: progressState.studentid,
+    classgroup: progressState.classgroup,
+    subjectid: progressState.subjectid,
+    taskid: progressState.taskid
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || "Could not load students."}</p>`;
+    return;
+  }
+
+  if (!result.students || result.students.length === 0) {
+    container.innerHTML = `<p class="helper-text">No student tasks found.</p>`;
+    return;
+  }
+
+  currentProgressRows = result.students;
+  renderProgressTaskStudents(currentProgressRows);
+}
+
+function renderProgressTaskStudents(rows) {
+  const container = document.getElementById("progress-task-students-list");
+
+  const byGroup = {};
+
+  rows.forEach(row => {
+    if (!byGroup[row.classgroup]) {
+      byGroup[row.classgroup] = [];
+    }
+
+    byGroup[row.classgroup].push(row);
+  });
+
+  const groups = Object.keys(byGroup).sort((a, b) => {
+    return String(a).localeCompare(String(b), undefined, { numeric: true });
+  });
+
+  let html = "";
+
+  groups.forEach(group => {
+    html += `<div class="group-heading">${escapeHtml(group)}</div>`;
+
+    byGroup[group].forEach(row => {
+      const pending = progressPendingUpdates[row.studenttaskid] || {};
+
+      const completeStatus = pending.completeStatus !== undefined
+        ? pending.completeStatus
+        : row.completestatus;
+
+      const verifyStatus = pending.verifyStatus !== undefined
+        ? pending.verifyStatus
+        : row.verifystatus;
+
+      const isComplete = !!completeStatus;
+      const isVerified = !!verifyStatus;
+
+      html += `
+        <div class="student-status-row">
+          <div class="student-status-name">${escapeHtml(row.username)}</div>
+
+          <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
+            ${
+              isComplete
+                ? `<span class="status-tick">✓</span>`
+                : `To be completed`
+            }
+          </div>
+
+          <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
+            ${
+              isVerified
+                ? `<span class="status-tick">✓</span>`
+                : `To be verified`
+            }
+          </div>
+        </div>
+      `;
+    });
+  });
+
+  html += `
+    <button class="save-btn" onclick="saveProgressPendingChanges()">
+      Save Changes
+    </button>
+  `;
+
+  container.innerHTML = html;
+}
+
+async function loadIndividualStudentTaskList() {
+  showScreen("progress-task-students-screen");
+
+  progressPendingUpdates = {};
+
+  const container = document.getElementById("progress-task-students-list");
+  container.innerHTML = `<p class="helper-text">Loading student tasks...</p>`;
+
+  const result = await apiPost("/api/progress/task-detail", {
+    studentid: progressState.studentid,
+    classgroup: "ALL",
+    subjectid: "ALL",
+    taskid: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || "Could not load student tasks."}</p>`;
+    return;
+  }
+
+  if (!result.students || result.students.length === 0) {
+    container.innerHTML = `<p class="helper-text">No tasks assigned to this student.</p>`;
+    return;
+  }
+
+  currentProgressRows = result.students;
+  renderIndividualStudentTaskList(currentProgressRows);
+}
+
+function renderIndividualStudentTaskList(rows) {
+  const container = document.getElementById("progress-task-students-list");
+
+  const bySubject = {};
+
+  rows.forEach(row => {
+    if (!bySubject[row.subjectname]) {
+      bySubject[row.subjectname] = [];
+    }
+
+    bySubject[row.subjectname].push(row);
+  });
+
+  let html = "";
+
+  Object.keys(bySubject)
+    .sort()
+    .forEach(subjectName => {
+      html += `<div class="group-heading">${escapeHtml(subjectName)}</div>`;
+
+      bySubject[subjectName].forEach(row => {
+        const pending = progressPendingUpdates[row.studenttaskid] || {};
+
+        const completeStatus = pending.completeStatus !== undefined
+          ? pending.completeStatus
+          : row.completestatus;
+
+        const verifyStatus = pending.verifyStatus !== undefined
+          ? pending.verifyStatus
+          : row.verifystatus;
+
+        const isComplete = !!completeStatus;
+        const isVerified = !!verifyStatus;
+
+        html += `
+          <div class="student-status-row">
+            <div class="student-status-name">${escapeHtml(row.taskname)}</div>
+
+            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
+              ${
+                isComplete
+                  ? `<span class="status-tick">✓</span>`
+                  : `To be completed`
+              }
+            </div>
+
+            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
+              ${
+                isVerified
+                  ? `<span class="status-tick">✓</span>`
+                  : `To be verified`
+              }
+            </div>
+          </div>
+        `;
+      });
+    });
+
+  html += `
+    <button class="save-btn" onclick="saveProgressPendingChanges()">
+      Save Changes
+    </button>
+  `;
+
+  container.innerHTML = html;
+}
+
+function toggleProgressPending(studenttaskid, field, value) {
+  if (!progressPendingUpdates[studenttaskid]) {
+    progressPendingUpdates[studenttaskid] = {
+      studenttaskid
+    };
+  }
+
+  progressPendingUpdates[studenttaskid][field] = value ? "YES" : "";
+
+  if (progressState.contextType === "student") {
+    renderIndividualStudentTaskList(currentProgressRows);
+  } else {
+    renderProgressTaskStudents(currentProgressRows);
+  }
+}
+
+async function saveProgressPendingChanges() {
+  const updates = Object.values(progressPendingUpdates);
+
+  if (updates.length === 0) {
+    alert("No changes to save.");
+    return;
+  }
+
+  for (const update of updates) {
+    if (update.completeStatus !== undefined) {
+      const completeResult = await apiPost("/api/tasks/update-complete", {
+        studenttaskid: update.studenttaskid,
+        complete: update.completeStatus !== ""
+      }, state.token);
+
+      if (!completeResult.success) {
+        alert(completeResult.error || "Could not save completion update.");
+        return;
+      }
+    }
+
+    if (update.verifyStatus !== undefined) {
+      const verifyResult = await apiPost("/api/admin/tasks/verify", {
+        studenttaskid: update.studenttaskid,
+        verified: update.verifyStatus !== ""
+      }, state.token);
+
+      if (!verifyResult.success) {
+        alert(verifyResult.error || "Could not save verification update.");
+        return;
+      }
+    }
+  }
+
+  alert("Changes saved.");
+
+  progressPendingUpdates = {};
+
+  if (progressState.contextType === "student") {
+    await loadIndividualStudentTaskList();
+  } else {
+    await loadProgressTaskStudents();
+  }
+}
+
+/* =========================
+   HELPERS
+========================= */
 
 function groupTasksBySubject(tasks) {
   const grouped = {};
@@ -1061,11 +1140,21 @@ function renderTaskLinks(task) {
   `;
 }
 
+function normalizeClientText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
 
-
-
-
-
+function escapeForAttribute(value) {
+  return String(value || "")
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'")
+    .replaceAll('"', "&quot;");
+}
 
 function escapeHtml(value) {
   return String(value || "")

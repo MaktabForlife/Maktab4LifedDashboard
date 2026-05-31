@@ -468,7 +468,7 @@ async function toggleStudentSubjectTask(studenttaskid, complete) {
   renderStudentSubjectTaskList();
 }
 
-/* async function toggleStudentTask(studenttaskid, complete) {
+ async function toggleStudentTask(studenttaskid, complete) {
   const result = await apiPost("/api/tasks/update-complete", {
     studenttaskid,
     complete
@@ -481,7 +481,7 @@ async function toggleStudentSubjectTask(studenttaskid, complete) {
 
   showStudentTasks();
 }
-*/
+
 
 
 

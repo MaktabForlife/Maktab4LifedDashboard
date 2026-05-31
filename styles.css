@@ -116,6 +116,35 @@ h3 {
   display: block;
 }
 
+#auth-screen.student-theme {
+  --teal: #234569;
+  --teal-dark: #234569;
+  --teal-mid: #234569;
+  --student-primary: #234569;
+  --student-dark: #234569;
+}
+
+#auth-screen.student-theme h1,
+#auth-screen.student-theme h2,
+#auth-screen.student-theme h3 {
+  color: #234569;
+}
+
+#auth-screen.student-theme button {
+  background: #234569;
+}
+
+#auth-screen.student-theme input,
+#auth-screen.student-theme select {
+  border-color: #234569;
+  color: #234569;
+}
+
+#auth-screen.student-theme .auth-box {
+  border-color: rgba(35, 69, 105, 0.35);
+}
+
+
 .subtitle,
 .helper-text,
 .mini-text {

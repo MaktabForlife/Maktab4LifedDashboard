@@ -221,6 +221,16 @@ function showAdminAcademics() {
   showScreen("admin-academics");
 }
 
+
+function configureScreenSmallButton(screenId, text, onclick, useSaveReturn = false) {
+  const button = document.querySelector(`#${screenId} .small-btn`);
+  if (!button) return;
+
+  button.innerText = text;
+  button.setAttribute("onclick", onclick);
+  button.classList.toggle("save-return-btn", useSaveReturn);
+}
+
 /* =========================
    STUDENT TASK VIEW
 ========================= */
@@ -264,17 +274,8 @@ function setProgressScreensForStudent() {
     screen.classList.add("student-theme");
   });
 
-  const subjectBackButton = document.querySelector("#progress-subjects-screen .small-btn");
-  if (subjectBackButton) {
-    subjectBackButton.setAttribute("onclick", "showScreen('student-home')");
-  }
-
-  const taskBackButton = document.querySelector("#progress-tasks-screen .small-btn");
-  if (taskBackButton) {
-    taskBackButton.setAttribute("onclick", "showStudentTasks()");
-    taskBackButton.innerText = "←";
-    taskBackButton.title = "Back to subjects";
-  }
+  configureScreenSmallButton("progress-subjects-screen", "BACK", "showScreen('student-home')", false);
+  configureScreenSmallButton("progress-tasks-screen", "BACK", "showStudentTasks()", false);
 }
 
 function setProgressScreensForAdmin() {
@@ -285,20 +286,9 @@ function setProgressScreensForAdmin() {
     screen.classList.add("admin-theme");
   });
 
-  const subjectBackButton = document.querySelector("#progress-subjects-screen .small-btn");
-  if (subjectBackButton) {
-    subjectBackButton.setAttribute("onclick", "showScreen('progress-report')");
-  }
-
-  const taskBackButton = document.querySelector("#progress-tasks-screen .small-btn");
-  if (taskBackButton) {
-    taskBackButton.setAttribute("onclick", "showScreen('progress-subjects-screen')");
-  }
-
-  const taskStudentsBackButton = document.querySelector("#progress-task-students-screen .small-btn");
-  if (taskStudentsBackButton) {
-    taskStudentsBackButton.setAttribute("onclick", "showScreen('progress-tasks-screen')");
-  }
+  configureScreenSmallButton("progress-subjects-screen", "BACK", "showScreen('progress-report')", false);
+  configureScreenSmallButton("progress-tasks-screen", "BACK", "showScreen('progress-subjects-screen')", false);
+  configureScreenSmallButton("progress-task-students-screen", "BACK", "showScreen('progress-tasks-screen')", false);
 }
 
 function buildStudentSubjectTaskGroups(tasks) {
@@ -362,13 +352,8 @@ function openStudentSubjectTasks(subjectKey) {
 
   currentStudentSubjectKey = subjectKey;
   progressPendingUpdates = {};
-  progressState.contextType = "student-self";
-  progressState.subjectid = subject.subjectid || subjectKey;
-  progressState.subjectname = subject.subjectname || "";
-  progressState.taskid = "ALL";
-  progressState.taskname = "";
-
   document.getElementById("progress-tasks-title").innerText = subject.subjectname;
+  configureScreenSmallButton("progress-tasks-screen", "Save Changes →", "saveStudentTaskChangesAndReturn()", true);
   showScreen("progress-tasks-screen");
   renderStudentSubjectTaskList();
 }
@@ -384,62 +369,66 @@ function renderStudentSubjectTaskList() {
 
   const rows = [...subject.tasks].sort(sortByTaskId);
 
-  container.innerHTML = `
-    <div class="student-task-top-actions">
-      <button
-        class="small-btn save-top-btn"
-        onclick="saveProgressPendingChanges()"
-      >
-        Save Changes
-      </button>
-    </div>
+  container.innerHTML = rows.map(task => {
+    const pending = progressPendingUpdates[task.studenttaskid] || {};
 
-    ${rows.map(task => {
-      const pending = progressPendingUpdates[task.studenttaskid] || {};
+    const completeStatus = pending.completeStatus !== undefined
+      ? pending.completeStatus
+      : task.completestatus;
 
-      const completeStatus = pending.completeStatus !== undefined
-        ? pending.completeStatus
-        : task.completestatus;
+    const isComplete = isStatusOn(completeStatus);
+    const isVerified = isStatusOn(task.verifystatus);
 
-      const verifyStatus = task.verifystatus;
+    return `
+      <div class="student-status-row">
+        <div class="student-status-name">${escapeHtml(task.taskname)}</div>
 
-      const isComplete = isStatusOn(completeStatus);
-      const isVerified = isStatusOn(verifyStatus);
-
-      return `
-        <div class="student-status-row">
-          <div class="student-status-name">${escapeHtml(task.taskname)}</div>
-
-          <div
-            class="status-action"
-            onclick="toggleProgressPending('${task.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"}, this)"
-          >
-            ${
-              isComplete
-                ? `<span class="status-tick status-tick-complete">✓</span>`
-                : `To be<br>completed`
-            }
-          </div>
-
-          <div class="status-action">
-            ${
-              isVerified
-                ? `<span class="status-tick status-tick-verified">✓</span>`
-                : `To be<br>verified`
-            }
-          </div>
+        <div class="status-action" onclick="toggleProgressPending('${task.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"}, this)">
+          ${
+            isComplete
+              ? `<span class="status-tick status-tick-complete">✓</span>`
+              : `To be<br>completed`
+          }
         </div>
-      `;
-    }).join("")}
-  `;
+
+        <div class="status-action">
+          ${
+            isVerified
+              ? `<span class="status-tick status-tick-verified">✓</span>`
+              : `To be<br>verified`
+          }
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 function toggleStudentSubjectTask(studenttaskid, complete, element) {
+  // Compatibility wrapper for any older student onclick handlers.
   toggleProgressPending(studenttaskid, "completeStatus", complete, element);
 }
 
+async function saveStudentTaskChangesAndReturn() {
+  const button = document.getElementById("progress-tasks-screen")?.querySelector(".small-btn");
 
+  if (button) {
+    button.disabled = true;
+    button.innerText = "Saving...";
+  }
 
+  try {
+    await savePendingProgressUpdatesOnly();
+    progressPendingUpdates = {};
+    await showStudentTasks();
+  } catch (err) {
+    if (button) {
+      button.disabled = false;
+      button.innerText = "Save Changes →";
+    }
+
+    alert(err.message || "Could not save changes.");
+  }
+}
 
  async function toggleStudentTask(studenttaskid, complete) {
   const result = await apiPost("/api/tasks/update-complete", {
@@ -876,12 +865,12 @@ async function openProgressContext(type, value) {
       `#progress-student-select option[value="${CSS.escape(value)}"]`
     );
 
-    const name = selectedOption ? selectedOption.textContent : "Student";
+    progressState.studentname = selectedOption ? selectedOption.textContent : "Student";
 
-    document.getElementById("progress-task-students-title").innerText =
-      `${name}'s Tasks`;
+    document.getElementById("progress-subjects-title").innerText =
+      `${progressState.studentname}'s Subjects`;
 
-    await loadIndividualStudentTaskList();
+    await loadProgressSubjects();
   }
 }
 
@@ -920,6 +909,12 @@ async function openProgressSubject(subjectid, subjectname) {
   progressState.subjectid = subjectid;
   progressState.subjectname = subjectname;
   progressState.taskid = "ALL";
+
+  if (progressState.contextType === "student") {
+    document.getElementById("progress-task-students-title").innerText = subjectname;
+    await loadIndividualStudentSubjectTaskList();
+    return;
+  }
 
   document.getElementById("progress-tasks-title").innerText = subjectname;
 
@@ -963,13 +958,19 @@ async function openProgressTask(taskid, taskname) {
   progressState.taskid = taskid;
   progressState.taskname = taskname;
 
-  document.getElementById("progress-task-students-title").innerText = taskname;
+  const heading = progressState.contextType === "group" && progressState.classgroup !== "ALL"
+    ? `${taskname} Group ${progressState.classgroup}`
+    : taskname;
+
+  document.getElementById("progress-task-students-title").innerText = heading;
+  configureScreenSmallButton("progress-task-students-screen", "Save Changes →", "saveProgressTaskStudentsAndReturn()", true);
 
   await loadProgressTaskStudents();
 }
 
 async function loadProgressTaskStudents() {
   showScreen("progress-task-students-screen");
+  configureScreenSmallButton("progress-task-students-screen", "Save Changes →", "saveProgressTaskStudentsAndReturn()", true);
 
   progressPendingUpdates = {};
 
@@ -1003,11 +1004,12 @@ function renderProgressTaskStudents(rows) {
   const byGroup = {};
 
   rows.forEach(row => {
-    if (!byGroup[row.classgroup]) {
-      byGroup[row.classgroup] = [];
+    const group = row.classgroup || "Ungrouped";
+    if (!byGroup[group]) {
+      byGroup[group] = [];
     }
 
-    byGroup[row.classgroup].push(row);
+    byGroup[group].push(row);
   });
 
   const groups = Object.keys(byGroup).sort((a, b) => {
@@ -1016,8 +1018,10 @@ function renderProgressTaskStudents(rows) {
 
   let html = "";
 
-  groups.forEach(group => {
-    html += `<div class="group-heading">${escapeHtml(group)}</div>`;
+  groups.forEach((group, groupIndex) => {
+    if (groupIndex > 0) {
+      html += `<div class="group-separator-line"></div>`;
+    }
 
     byGroup[group].forEach(row => {
       const pending = progressPendingUpdates[row.studenttaskid] || {};
@@ -1037,14 +1041,16 @@ function renderProgressTaskStudents(rows) {
         <div class="student-status-row">
           <div class="student-status-name">${escapeHtml(row.username)}</div>
 
-<div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"}, this)">            ${
+          <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"}, this)">
+            ${
               isComplete
                 ? `<span class="status-tick status-tick-complete">✓</span>`
                 : `To be<br>completed`
             }
           </div>
 
-<div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"}, this)">            ${
+          <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"}, this)">
+            ${
               isVerified
                 ? `<span class="status-tick status-tick-verified">✓</span>`
                 : `To be<br>verified`
@@ -1055,13 +1061,37 @@ function renderProgressTaskStudents(rows) {
     });
   });
 
-  html += `
-    <button class="save-btn" onclick="saveProgressPendingChanges()">
-      Save Changes
-    </button>
-  `;
-
   container.innerHTML = html;
+}
+
+async function loadIndividualStudentSubjectTaskList() {
+  showScreen("progress-task-students-screen");
+  configureScreenSmallButton("progress-task-students-screen", "Save Changes →", "saveProgressTaskStudentsAndReturn()", true);
+
+  progressPendingUpdates = {};
+
+  const container = document.getElementById("progress-task-students-list");
+  container.innerHTML = `<p class="helper-text">Loading tasks...</p>`;
+
+  const result = await apiPost("/api/progress/task-detail", {
+    studentid: progressState.studentid,
+    classgroup: "ALL",
+    subjectid: progressState.subjectid,
+    taskid: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || "Could not load student tasks."}</p>`;
+    return;
+  }
+
+  if (!result.students || result.students.length === 0) {
+    container.innerHTML = `<p class="helper-text">No tasks found for this subject.</p>`;
+    return;
+  }
+
+  currentProgressRows = result.students;
+  renderIndividualStudentTaskList(currentProgressRows);
 }
 
 async function loadIndividualStudentTaskList() {
@@ -1096,64 +1126,46 @@ async function loadIndividualStudentTaskList() {
 function renderIndividualStudentTaskList(rows) {
   const container = document.getElementById("progress-task-students-list");
 
-  const bySubject = {};
-
-  rows.forEach(row => {
-    if (!bySubject[row.subjectname]) {
-      bySubject[row.subjectname] = [];
-    }
-
-    bySubject[row.subjectname].push(row);
-  });
+  const sortedRows = [...rows].sort(sortByTaskId);
 
   let html = "";
 
-  Object.keys(bySubject)
-    .sort()
-    .forEach(subjectName => {
-      html += `<div class="group-heading">${escapeHtml(subjectName)}</div>`;
+  sortedRows.forEach(row => {
+    const pending = progressPendingUpdates[row.studenttaskid] || {};
 
-      [...bySubject[subjectName]].sort(sortByTaskId).forEach(row => {
-        const pending = progressPendingUpdates[row.studenttaskid] || {};
+    const completeStatus = pending.completeStatus !== undefined
+      ? pending.completeStatus
+      : row.completestatus;
 
-        const completeStatus = pending.completeStatus !== undefined
-          ? pending.completeStatus
-          : row.completestatus;
+    const verifyStatus = pending.verifyStatus !== undefined
+      ? pending.verifyStatus
+      : row.verifystatus;
 
-        const verifyStatus = pending.verifyStatus !== undefined
-          ? pending.verifyStatus
-          : row.verifystatus;
+    const isComplete = !!completeStatus;
+    const isVerified = !!verifyStatus;
 
-        const isComplete = !!completeStatus;
-        const isVerified = !!verifyStatus;
+    html += `
+      <div class="student-status-row">
+        <div class="student-status-name">${escapeHtml(row.taskname)}</div>
 
-        html += `
-          <div class="student-status-row">
-            <div class="student-status-name">${escapeHtml(row.taskname)}</div>
+        <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"}, this)">
+          ${
+            isComplete
+              ? `<span class="status-tick status-tick-complete">✓</span>`
+              : `To be<br>completed`
+          }
+        </div>
 
-<div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"}, this)">              ${
-                isComplete
-                  ? `<span class="status-tick status-tick-complete">✓</span>`
-                  : `To be<br>completed`
-              }
-            </div>
-
-<div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"}, this)">              ${
-                isVerified
-                  ? `<span class="status-tick status-tick-verified">✓</span>`
-                  : `To be<br>verified`
-              }
-            </div>
-          </div>
-        `;
-      });
-    });
-
-  html += `
-    <button class="save-btn" onclick="saveProgressPendingChanges()">
-      Save Changes
-    </button>
-  `;
+        <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"}, this)">
+          ${
+            isVerified
+              ? `<span class="status-tick status-tick-verified">✓</span>`
+              : `To be<br>verified`
+          }
+        </div>
+      </div>
+    `;
+  });
 
   container.innerHTML = html;
 }
@@ -1195,6 +1207,34 @@ function updateProgressPendingElement(element, field, value) {
 
 
 
+async function savePendingProgressUpdatesOnly() {
+  const updates = Object.values(progressPendingUpdates);
+
+  for (const update of updates) {
+    if (update.completeStatus !== undefined) {
+      const completeResult = await apiPost("/api/tasks/update-complete", {
+        studenttaskid: update.studenttaskid,
+        complete: !!update.completeStatus
+      }, state.token);
+
+      if (!completeResult.success) {
+        throw new Error(completeResult.error || "Could not save completion update.");
+      }
+    }
+
+    if (update.verifyStatus !== undefined) {
+      const verifyResult = await apiPost("/api/admin/tasks/verify", {
+        studenttaskid: update.studenttaskid,
+        verified: !!update.verifyStatus
+      }, state.token);
+
+      if (!verifyResult.success) {
+        throw new Error(verifyResult.error || "Could not save verification update.");
+      }
+    }
+  }
+}
+
 async function saveProgressPendingChanges() {
   const updates = Object.values(progressPendingUpdates);
 
@@ -1203,152 +1243,46 @@ async function saveProgressPendingChanges() {
     return;
   }
 
-  const saveButton = document.querySelector(".save-btn, .save-top-btn, .save-progress-button");
-  const originalSaveText = saveButton ? saveButton.innerText : "";
-
-  if (saveButton) {
-    saveButton.disabled = true;
-    saveButton.innerText = "Saving...";
-  }
-
   try {
-    for (const update of updates) {
-      if (update.completeStatus !== undefined) {
-        const completeResult = await apiPost("/api/tasks/update-complete", {
-          studenttaskid: update.studenttaskid,
-          complete: !!update.completeStatus
-        }, state.token);
-
-        if (!completeResult.success) {
-          throw new Error(completeResult.error || "Could not save completion update.");
-        }
-      }
-
-      if (update.verifyStatus !== undefined) {
-        const verifyResult = await apiPost("/api/admin/tasks/verify", {
-          studenttaskid: update.studenttaskid,
-          verified: !!update.verifyStatus
-        }, state.token);
-
-        if (!verifyResult.success) {
-          throw new Error(verifyResult.error || "Could not save verification update.");
-        }
-      }
-    }
-
-    if (progressState.contextType === "student-self") {
-      updates.forEach(update => {
-        Object.values(studentSubjectTaskGroups).forEach(subject => {
-          subject.tasks.forEach(task => {
-            if (String(task.studenttaskid) === String(update.studenttaskid)) {
-              if (update.completeStatus !== undefined) {
-                task.completestatus = update.completeStatus ? "YES" : "";
-              }
-            }
-          });
-        });
-      });
-
-      progressPendingUpdates = {};
-      renderStudentSubjectTaskList();
-
-      const refreshedButton = document.querySelector(".save-top-btn");
-      if (refreshedButton) {
-        refreshedButton.innerText = "Saved";
-        setTimeout(() => {
-          refreshedButton.innerText = "Save Changes";
-          refreshedButton.disabled = false;
-        }, 900);
-      }
-
-      return;
-    }
-
+    await savePendingProgressUpdatesOnly();
     alert("Changes saved.");
-
     progressPendingUpdates = {};
 
     if (progressState.contextType === "student") {
-      await loadIndividualStudentTaskList();
+      await loadIndividualStudentSubjectTaskList();
     } else {
       await loadProgressTaskStudents();
     }
   } catch (err) {
     alert(err.message || "Could not save changes.");
-
-    if (saveButton) {
-      saveButton.disabled = false;
-      saveButton.innerText = originalSaveText || "Save Changes";
-    }
   }
 }
 
-/* =========================
-   HELPERS
-========================= */
+async function saveProgressTaskStudentsAndReturn() {
+  const button = document.getElementById("progress-task-students-screen")?.querySelector(".small-btn");
 
-function groupTasksBySubject(tasks) {
-  const grouped = {};
-
-  tasks.forEach(task => {
-    const subjectName = task.subjectname || "Other";
-
-    if (!grouped[subjectName]) {
-      grouped[subjectName] = [];
-    }
-
-    grouped[subjectName].push(task);
-  });
-
-  Object.keys(grouped).forEach(subjectName => {
-    grouped[subjectName].sort(sortByTaskId);
-  });
-
-  return grouped;
-}
-
-function sortByTaskId(a, b) {
-  const aRaw = a.taskid || a.taskID || a.TaskID || "";
-  const bRaw = b.taskid || b.taskID || b.TaskID || "";
-  const aNum = Number(aRaw);
-  const bNum = Number(bRaw);
-
-  if (!Number.isNaN(aNum) && !Number.isNaN(bNum) && aNum !== bNum) {
-    return aNum - bNum;
+  if (button) {
+    button.disabled = true;
+    button.innerText = "Saving...";
   }
 
-  const idCompare = String(aRaw).localeCompare(String(bRaw), undefined, {
-    numeric: true,
-    sensitivity: "base"
-  });
+  try {
+    await savePendingProgressUpdatesOnly();
+    progressPendingUpdates = {};
 
-  if (idCompare !== 0) return idCompare;
+    if (progressState.contextType === "student") {
+      await loadProgressSubjects();
+    } else {
+      await loadProgressTasks();
+    }
+  } catch (err) {
+    if (button) {
+      button.disabled = false;
+      button.innerText = "Save Changes →";
+    }
 
-  return String(a.taskname || "").localeCompare(String(b.taskname || ""), undefined, {
-    numeric: true,
-    sensitivity: "base"
-  });
-}
-
-function isStatusOn(value) {
-  if (value === true) return true;
-  const text = String(value || "").trim().toLowerCase();
-  return text === "yes" || text === "true" || text === "complete" || text === "verified" || text === "1";
-}
-
-function renderCompleteProgressBar(completedPercent) {
-  const completeWidth = Math.max(0, Math.min(100, Number(completedPercent) || 0));
-
-  return `
-    <span class="progress-bars">
-      <span class="progress-bar-row">
-        <span class="progress-bar-label">Complete</span>
-        <span class="progress-track">
-          <span class="progress-fill progress-fill-complete" style="width:${completeWidth}%"></span>
-        </span>
-      </span>
-    </span>
-  `;
+    alert(err.message || "Could not save changes.");
+  }
 }
 
 function renderProgressBars(completedPercent, verifiedPercent) {

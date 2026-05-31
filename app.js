@@ -271,7 +271,9 @@ function setProgressScreensForStudent() {
 
   const taskBackButton = document.querySelector("#progress-tasks-screen .small-btn");
   if (taskBackButton) {
-    taskBackButton.setAttribute("onclick", "showStudentTasks()");
+    taskBackButton.innerText = "Save Changes →";
+    taskBackButton.classList.add("save-return-btn");
+    taskBackButton.setAttribute("onclick", "saveStudentTaskChangesAndReturn()");
   }
 }
 
@@ -290,12 +292,16 @@ function setProgressScreensForAdmin() {
 
   const taskBackButton = document.querySelector("#progress-tasks-screen .small-btn");
   if (taskBackButton) {
+    taskBackButton.innerText = "BACK";
+    taskBackButton.classList.remove("save-return-btn");
     taskBackButton.setAttribute("onclick", "showScreen('progress-subjects-screen')");
   }
 
   const taskStudentsBackButton = document.querySelector("#progress-task-students-screen .small-btn");
   if (taskStudentsBackButton) {
-    taskStudentsBackButton.setAttribute("onclick", "showScreen('progress-tasks-screen')");
+    taskStudentsBackButton.innerText = "Save Changes →";
+    taskStudentsBackButton.classList.add("save-return-btn");
+    taskStudentsBackButton.setAttribute("onclick", "saveProgressPendingChangesAndReturn()");
   }
 }
 
@@ -376,7 +382,13 @@ function renderStudentSubjectTaskList() {
   const rows = [...subject.tasks].sort(sortByTaskId);
 
   container.innerHTML = rows.map(task => {
-    const isComplete = isStatusOn(task.completestatus);
+    const pending = progressPendingUpdates[task.studenttaskid] || {};
+
+    const completeStatus = pending.completeStatus !== undefined
+      ? pending.completeStatus
+      : task.completestatus;
+
+    const isComplete = isStatusOn(completeStatus);
     const isVerified = isStatusOn(task.verifystatus);
 
     return `
@@ -387,7 +399,7 @@ function renderStudentSubjectTaskList() {
           ${
             isComplete
               ? `<span class="status-tick status-tick-complete">✓</span>`
-              : `To be completed`
+              : `To be<br>completed`
           }
         </div>
 
@@ -395,7 +407,7 @@ function renderStudentSubjectTaskList() {
           ${
             isVerified
               ? `<span class="status-tick status-tick-verified">✓</span>`
-              : `To be verified`
+              : `To be<br>verified`
           }
         </div>
       </div>
@@ -403,16 +415,14 @@ function renderStudentSubjectTaskList() {
   }).join("");
 }
 
-async function toggleStudentSubjectTask(studenttaskid, complete) {
-  const result = await apiPost("/api/tasks/update-complete", {
-    studenttaskid,
-    complete
-  }, state.token);
-
-  if (!result.success) {
-    alert(result.error || "Could not update task.");
-    return;
+function toggleStudentSubjectTask(studenttaskid, complete) {
+  if (!progressPendingUpdates[studenttaskid]) {
+    progressPendingUpdates[studenttaskid] = {
+      studenttaskid
+    };
   }
+
+  progressPendingUpdates[studenttaskid].completeStatus = complete ? "YES" : "";
 
   Object.values(studentSubjectTaskGroups).forEach(subject => {
     subject.tasks.forEach(task => {
@@ -859,10 +869,10 @@ async function openProgressContext(type, value) {
 
     const name = selectedOption ? selectedOption.textContent : "Student";
 
-    document.getElementById("progress-task-students-title").innerText =
-      `${name}'s Tasks`;
+    progressState.studentName = name;
+    document.getElementById("progress-subjects-title").innerText = `${name}'s Subjects`;
 
-    await loadIndividualStudentTaskList();
+    await loadProgressSubjects();
   }
 }
 
@@ -901,6 +911,12 @@ async function openProgressSubject(subjectid, subjectname) {
   progressState.subjectid = subjectid;
   progressState.subjectname = subjectname;
   progressState.taskid = "ALL";
+
+  if (progressState.contextType === "student") {
+    document.getElementById("progress-task-students-title").innerText = subjectname;
+    await loadIndividualStudentTaskList();
+    return;
+  }
 
   document.getElementById("progress-tasks-title").innerText = subjectname;
 
@@ -944,7 +960,11 @@ async function openProgressTask(taskid, taskname) {
   progressState.taskid = taskid;
   progressState.taskname = taskname;
 
-  document.getElementById("progress-task-students-title").innerText = taskname;
+  const title = progressState.contextType === "group"
+    ? `${taskname} ${progressState.classgroup}`
+    : taskname;
+
+  document.getElementById("progress-task-students-title").innerText = title;
 
   await loadProgressTaskStudents();
 }
@@ -997,8 +1017,10 @@ function renderProgressTaskStudents(rows) {
 
   let html = "";
 
-  groups.forEach(group => {
-    html += `<div class="group-heading">${escapeHtml(group)}</div>`;
+  groups.forEach((group, index) => {
+    if (index > 0) {
+      html += `<div class="group-separator-line" aria-hidden="true"></div>`;
+    }
 
     byGroup[group].forEach(row => {
       const pending = progressPendingUpdates[row.studenttaskid] || {};
@@ -1022,7 +1044,7 @@ function renderProgressTaskStudents(rows) {
             ${
               isComplete
                 ? `<span class="status-tick status-tick-complete">✓</span>`
-                : `To be completed`
+                : `To be<br>completed`
             }
           </div>
 
@@ -1030,19 +1052,13 @@ function renderProgressTaskStudents(rows) {
             ${
               isVerified
                 ? `<span class="status-tick status-tick-verified">✓</span>`
-                : `To be verified`
+                : `To be<br>verified`
             }
           </div>
         </div>
       `;
     });
   });
-
-  html += `
-    <button class="save-btn" onclick="saveProgressPendingChanges()">
-      Save Changes
-    </button>
-  `;
 
   container.innerHTML = html;
 }
@@ -1058,7 +1074,7 @@ async function loadIndividualStudentTaskList() {
   const result = await apiPost("/api/progress/task-detail", {
     studentid: progressState.studentid,
     classgroup: "ALL",
-    subjectid: "ALL",
+    subjectid: progressState.subjectid || "ALL",
     taskid: "ALL"
   }, state.token);
 
@@ -1090,55 +1106,53 @@ function renderIndividualStudentTaskList(rows) {
   });
 
   let html = "";
+  const subjectNames = Object.keys(bySubject).sort();
 
-  Object.keys(bySubject)
-    .sort()
-    .forEach(subjectName => {
-      html += `<div class="group-heading">${escapeHtml(subjectName)}</div>`;
+  subjectNames.forEach((subjectName, index) => {
+    if (progressState.subjectid === "ALL") {
+      if (index > 0) {
+        html += `<div class="group-separator-line" aria-hidden="true"></div>`;
+      }
+      html += `<div class="subject-heading-thin">${escapeHtml(subjectName)}</div>`;
+    }
 
-      [...bySubject[subjectName]].sort(sortByTaskId).forEach(row => {
-        const pending = progressPendingUpdates[row.studenttaskid] || {};
+    [...bySubject[subjectName]].sort(sortByTaskId).forEach(row => {
+      const pending = progressPendingUpdates[row.studenttaskid] || {};
 
-        const completeStatus = pending.completeStatus !== undefined
-          ? pending.completeStatus
-          : row.completestatus;
+      const completeStatus = pending.completeStatus !== undefined
+        ? pending.completeStatus
+        : row.completestatus;
 
-        const verifyStatus = pending.verifyStatus !== undefined
-          ? pending.verifyStatus
-          : row.verifystatus;
+      const verifyStatus = pending.verifyStatus !== undefined
+        ? pending.verifyStatus
+        : row.verifystatus;
 
-        const isComplete = !!completeStatus;
-        const isVerified = !!verifyStatus;
+      const isComplete = !!completeStatus;
+      const isVerified = !!verifyStatus;
 
-        html += `
-          <div class="student-status-row">
-            <div class="student-status-name">${escapeHtml(row.taskname)}</div>
+      html += `
+        <div class="student-status-row">
+          <div class="student-status-name">${escapeHtml(row.taskname)}</div>
 
-            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
-              ${
-                isComplete
-                  ? `<span class="status-tick status-tick-complete">✓</span>`
-                  : `To be completed`
-              }
-            </div>
-
-            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
-              ${
-                isVerified
-                  ? `<span class="status-tick status-tick-verified">✓</span>`
-                  : `To be verified`
-              }
-            </div>
+          <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
+            ${
+              isComplete
+                ? `<span class="status-tick status-tick-complete">✓</span>`
+                : `To be<br>completed`
+            }
           </div>
-        `;
-      });
-    });
 
-  html += `
-    <button class="save-btn" onclick="saveProgressPendingChanges()">
-      Save Changes
-    </button>
-  `;
+          <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
+            ${
+              isVerified
+                ? `<span class="status-tick status-tick-verified">✓</span>`
+                : `To be<br>verified`
+            }
+          </div>
+        </div>
+      `;
+    });
+  });
 
   container.innerHTML = html;
 }
@@ -1159,12 +1173,17 @@ function toggleProgressPending(studenttaskid, field, value) {
   }
 }
 
-async function saveProgressPendingChanges() {
+async function saveProgressPendingChanges(options = {}) {
+  const shouldReload = options.reload !== false;
+  const shouldAlert = options.alert !== false;
+
   const updates = Object.values(progressPendingUpdates);
 
   if (updates.length === 0) {
-    alert("No changes to save.");
-    return;
+    if (shouldAlert) {
+      alert("No changes to save.");
+    }
+    return false;
   }
 
   for (const update of updates) {
@@ -1176,7 +1195,7 @@ async function saveProgressPendingChanges() {
 
       if (!completeResult.success) {
         alert(completeResult.error || "Could not save completion update.");
-        return;
+        return false;
       }
     }
 
@@ -1188,21 +1207,79 @@ async function saveProgressPendingChanges() {
 
       if (!verifyResult.success) {
         alert(verifyResult.error || "Could not save verification update.");
-        return;
+        return false;
       }
     }
   }
 
-  alert("Changes saved.");
-
   progressPendingUpdates = {};
 
+  if (shouldAlert) {
+    alert("Changes saved.");
+  }
+
+  if (shouldReload) {
+    if (progressState.contextType === "student") {
+      await loadIndividualStudentTaskList();
+    } else {
+      await loadProgressTaskStudents();
+    }
+  }
+
+  return true;
+}
+
+async function saveProgressPendingChangesAndReturn() {
+  const button = document.querySelector("#progress-task-students-screen .small-btn");
+  const originalText = button ? button.innerText : "Save Changes →";
+
+  if (button) {
+    button.disabled = true;
+    button.innerText = "Saving...";
+  }
+
+  const saved = await saveProgressPendingChanges({ reload: false, alert: false });
+
+  if (button) {
+    button.disabled = false;
+    button.innerText = originalText;
+  }
+
+  if (!saved && Object.keys(progressPendingUpdates).length > 0) {
+    return;
+  }
+
   if (progressState.contextType === "student") {
-    await loadIndividualStudentTaskList();
+    showScreen("progress-subjects-screen");
   } else {
-    await loadProgressTaskStudents();
+    showScreen("progress-tasks-screen");
   }
 }
+
+async function saveStudentTaskChangesAndReturn() {
+  const button = document.querySelector("#progress-tasks-screen .small-btn");
+  const originalText = button ? button.innerText : "Save Changes →";
+
+  if (button) {
+    button.disabled = true;
+    button.innerText = "Saving...";
+  }
+
+  const saved = await saveProgressPendingChanges({ reload: false, alert: false });
+
+  if (button) {
+    button.disabled = false;
+    button.innerText = originalText;
+  }
+
+  if (!saved && Object.keys(progressPendingUpdates).length > 0) {
+    return;
+  }
+
+  progressPendingUpdates = {};
+  showStudentTasks();
+}
+
 
 /* =========================
    HELPERS

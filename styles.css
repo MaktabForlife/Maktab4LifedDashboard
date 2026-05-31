@@ -525,7 +525,16 @@ button:active {
   margin: 15px 0 8px;
 }
 
+@media (max-width: 520px) {
+  .student-status-row {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
 
+  .student-status-name {
+    text-align: center;
+  }
+}
 
 .status-action {
   min-height: 34px;

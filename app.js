@@ -21,6 +21,7 @@ function initApp() {
   if (parts[0] === "admin" && parts[1]) {
     state.portalType = "admin";
     state.uniqueid = parts[1];
+      setAuthTheme("admin");
     checkAdmin();
     return;
   }
@@ -28,6 +29,7 @@ function initApp() {
   if (parts[0] === "u" && parts[1]) {
     state.portalType = "student";
     state.uniqueid = parts[1];
+  setAuthTheme("student");
     checkStudent();
     return;
   }
@@ -1284,6 +1286,27 @@ async function saveStudentTaskChangesAndReturn() {
 /* =========================
    HELPERS
 ========================= */
+function setAuthTheme(type) {
+  const authScreen = document.getElementById("auth-screen");
+  if (!authScreen) return;
+
+  authScreen.classList.remove("student-theme", "admin-theme");
+  document.body.classList.remove("student-body", "admin-body");
+
+  if (type === "student") {
+    authScreen.classList.add("student-theme");
+    document.body.classList.add("student-body");
+  }
+
+  if (type === "admin") {
+    authScreen.classList.add("admin-theme");
+    document.body.classList.add("admin-body");
+  }
+}
+
+
+
+
 
 function groupTasksBySubject(tasks) {
   const grouped = {};

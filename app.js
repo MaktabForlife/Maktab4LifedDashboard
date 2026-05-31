@@ -457,7 +457,41 @@ async function toggleStudentTask(studenttaskid, complete) {
 ========================= */
 
 let studentResourceSubjects = [];
-let currentStudentResourceSubjectId = "";
+let currentStudentResourceMode = "";
+
+const STUDENT_RESOURCE_CATEGORIES = [
+  {
+    key: "SURAHS",
+    label: "Surahs",
+    subtitle: "Surah task resources",
+    types: null,
+    special: "surahs"
+  },
+  {
+    key: "PDF",
+    label: "PDF",
+    subtitle: "Books and worksheets",
+    types: ["PDF"]
+  },
+  {
+    key: "AUDIO",
+    label: "Audio",
+    subtitle: "Listening resources",
+    types: ["AUDIO"]
+  },
+  {
+    key: "VIDEO",
+    label: "Video",
+    subtitle: "Movie and video resources",
+    types: ["VIDEO", "MOVIE"]
+  },
+  {
+    key: "OTHER",
+    label: "Other",
+    subtitle: "Images, links, text and other files",
+    types: ["IMAGE", "VISUAL", "LINK", "TEXT", "OTHER"]
+  }
+];
 
 async function showStudentResources() {
   showScreen("student-resources-subjects");
@@ -472,151 +506,214 @@ async function showStudentResources() {
     return;
   }
 
-  studentResourceSubjects = result.subjects || [];
+  studentResourceSubjects = Array.isArray(result.subjects) ? result.subjects : [];
 
-  if (studentResourceSubjects.length === 0) {
-    container.innerHTML = `<p class="helper-text">No resources are available yet.</p>`;
-    return;
-  }
-
-  renderStudentResourceSubjects();
+  renderStudentResourceCategories();
 }
 
-function renderStudentResourceSubjects() {
+function renderStudentResourceCategories() {
   const container = document.getElementById("student-resource-subject-list");
 
-  const subjects = [...studentResourceSubjects].sort((a, b) => {
-    return String(a.subjectname || "").localeCompare(String(b.subjectname || ""), undefined, {
-      numeric: true,
-      sensitivity: "base"
-    });
-  });
+  if (!container) return;
 
-  container.innerHTML = subjects.map(subject => {
-    const count = Number(subject.resourceCount || countResourcesForSubject(subject) || 0);
-    const label = count === 1 ? "1 resource" : `${count} resources`;
+  const categoryButtons = STUDENT_RESOURCE_CATEGORIES.map(category => {
+    const count = countResourcesForCategory(category);
+    const countLabel = count === 1 ? "1 item" : `${count} items`;
+    const disabledClass = count === 0 ? " is-empty" : "";
+    const disabledAttr = count === 0 ? " disabled" : "";
 
     return `
-      <button class="resource-subject-button" onclick="openStudentResourceSubject('${escapeForAttribute(subject.subjectid)}')">
-        <span class="resource-subject-title">${escapeHtml(subject.subjectname || "Subject")}</span>
-        <span class="resource-count-pill">${escapeHtml(label)}</span>
+      <button class="resource-category-button${disabledClass}" onclick="openStudentResourceCategory('${escapeForAttribute(category.key)}')"${disabledAttr}>
+        <span class="resource-category-main">
+          <span class="resource-category-title">${escapeHtml(category.label)}</span>
+          <span class="resource-category-subtitle">${escapeHtml(category.subtitle)}</span>
+        </span>
+        <span class="resource-count-pill">${escapeHtml(countLabel)}</span>
       </button>
     `;
   }).join("");
+
+  const total = STUDENT_RESOURCE_CATEGORIES.reduce((sum, category) => sum + countResourcesForCategory(category), 0);
+
+  container.innerHTML = `
+    <div class="resource-category-grid">
+      ${categoryButtons}
+    </div>
+    ${total === 0 ? `<p class="helper-text">No resources are available yet.</p>` : ""}
+  `;
 }
 
-function openStudentResourceSubject(subjectid) {
-  const subject = studentResourceSubjects.find(item => String(item.subjectid) === String(subjectid));
+function openStudentResourceCategory(categoryKey) {
+  const category = STUDENT_RESOURCE_CATEGORIES.find(item => item.key === categoryKey);
 
-  if (!subject) {
-    alert("Subject resources not found. Please reload resources.");
+  if (!category) {
+    alert("Resource category not found. Please reload resources.");
     return;
   }
 
-  currentStudentResourceSubjectId = subjectid;
-  document.getElementById("student-resource-detail-title").innerText = subject.subjectname || "Resources";
-  showScreen("student-resources-detail");
-  renderStudentResourceDetail(subject);
-}
+  currentStudentResourceMode = categoryKey;
 
-function renderStudentResourceDetail(subject) {
-  const container = document.getElementById("student-resource-detail-content");
-
-  const subjectResources = getSubjectResourceArray(subject);
-
-  const taskGroups = Array.isArray(subject.tasks)
-    ? subject.tasks
-    : [];
-
-  let html = "";
-
-  if (subjectResources.length > 0) {
-    html += `
-      <div class="resource-section">
-        <h3>Subject Resources</h3>
-        <div class="resource-list">
-          ${subjectResources.map(resource => renderStudentResourceItem(resource)).join("")}
-        </div>
-      </div>
-    `;
+  const title = document.getElementById("student-resource-detail-title");
+  if (title) {
+    title.innerText = category.label;
   }
 
-  const tasksWithResources = taskGroups.filter(task => {
-    return getTaskResourceArray(task).length > 0;
+  showScreen("student-resources-detail");
+  renderStudentResourceCategoryDetail(category);
+}
+
+function renderStudentResourceCategoryDetail(category) {
+  const container = document.getElementById("student-resource-detail-content");
+  if (!container) return;
+
+  let groups = [];
+
+  if (category.special === "surahs") {
+    groups = buildSurahResourceGroups();
+  } else {
+    groups = buildMediaResourceGroups(category);
+  }
+
+  if (groups.length === 0) {
+    container.innerHTML = `<p class="helper-text">No ${escapeHtml(category.label)} resources are available yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = groups.map(group => `
+    <div class="resource-section resource-subject-group">
+      <h3>${escapeHtml(group.subjectname || "Subject")}</h3>
+      <div class="resource-task-list">
+        ${group.rows.map(row => renderStudentResourceRow(row)).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+
+function buildSurahResourceGroups() {
+  const surahSubjectIds = new Set(["SUBJ1", "SUBJ2"]);
+  const groups = [];
+
+  getSortedResourceSubjects()
+    .filter(subject => surahSubjectIds.has(String(subject.subjectid || "").trim().toUpperCase()))
+    .forEach(subject => {
+      const rows = [];
+
+      getTaskGroups(subject).forEach(task => {
+        getTaskResourceArray(task).forEach(resource => {
+          rows.push({
+            subject,
+            task,
+            resource,
+            taskid: task.taskid,
+            taskname: task.taskname || resource.name || resource.taskresourcename || "Task Resource",
+            label: task.taskname || resource.name || resource.taskresourcename || "Task Resource",
+            sublabel: getResourceType(resource),
+            link: getResourceLink(resource),
+            type: getResourceType(resource),
+            source: "TASK"
+          });
+        });
+      });
+
+      rows.sort(resourceRowSorter);
+
+      if (rows.length > 0) {
+        groups.push({
+          subjectid: subject.subjectid,
+          subjectname: subject.subjectname,
+          rows
+        });
+      }
+    });
+
+  return groups;
+}
+
+function buildMediaResourceGroups(category) {
+  const groups = [];
+  const allowedTypes = new Set((category.types || []).map(type => String(type).toUpperCase()));
+
+  getSortedResourceSubjects().forEach(subject => {
+    const rows = [];
+
+    getSubjectResourceArray(subject).forEach(resource => {
+      const type = getResourceType(resource);
+
+      if (!allowedTypes.has(type)) {
+        return;
+      }
+
+      rows.push({
+        subject,
+        task: null,
+        resource,
+        taskid: "",
+        taskname: "Subject Resource",
+        label: resource.name || resource.resourcename || "Subject Resource",
+        sublabel: "Subject Resource",
+        link: getResourceLink(resource),
+        type,
+        source: "SUBJECT"
+      });
+    });
+
+    getTaskGroups(subject).forEach(task => {
+      getTaskResourceArray(task).forEach(resource => {
+        const type = getResourceType(resource);
+
+        if (!allowedTypes.has(type)) {
+          return;
+        }
+
+        rows.push({
+          subject,
+          task,
+          resource,
+          taskid: task.taskid,
+          taskname: task.taskname || "Task",
+          label: task.taskname || resource.name || resource.taskresourcename || "Task Resource",
+          sublabel: getResourceType(resource),
+          link: getResourceLink(resource),
+          type,
+          source: "TASK"
+        });
+      });
+    });
+
+    rows.sort(resourceRowSorter);
+
+    if (rows.length > 0) {
+      groups.push({
+        subjectid: subject.subjectid,
+        subjectname: subject.subjectname,
+        rows
+      });
+    }
   });
 
-  if (tasksWithResources.length > 0) {
-    html += `
-      <div class="resource-section">
-        <h3>Task Resources</h3>
-        ${tasksWithResources.map(task => `
-          <div class="task-resource-group">
-            <div class="task-resource-heading">${escapeHtml(task.taskname || "Task")}</div>
-            <div class="resource-list">
-              ${getTaskResourceArray(task).map(resource => renderStudentResourceItem(resource)).join("")}
-            </div>
-          </div>
-        `).join("")}
-      </div>
-    `;
-  }
-
-  if (!html) {
-    html = `<p class="helper-text">No resources are available for this subject yet.</p>`;
-  }
-
-  container.innerHTML = html;
+  return groups;
 }
 
-function renderStudentResourceItem(resource) {
-  const type = String(resource.type || resource.resourcetype || "LINK").trim().toUpperCase();
-  const name = resource.name || resource.resourcename || resource.taskresourcename || "Resource";
-  const link = resource.link || resource.resourcelink || "";
-
-  if (!link) {
-    return `
-      <div class="resource-card">
-        <div class="resource-card-main">
-          <span class="resource-type-badge">${escapeHtml(type)}</span>
-          <span class="resource-name">${escapeHtml(name)}</span>
-        </div>
-        <p class="helper-text">No link available.</p>
-      </div>
-    `;
-  }
-
-  const safeLink = escapeHtml(link);
-  const safeName = escapeHtml(name);
-
-  let playerHtml = "";
-
-  if (type === "AUDIO") {
-    playerHtml = `
-      <audio class="resource-player" controls preload="none">
-        <source src="${safeLink}">
-        Your browser does not support audio playback.
-      </audio>
-    `;
-  } else if (type === "VIDEO" || type === "MOVIE") {
-    playerHtml = `
-      <video class="resource-player" controls preload="metadata">
-        <source src="${safeLink}">
-        Your browser does not support video playback.
-      </video>
-    `;
-  }
+function renderStudentResourceRow(row) {
+  const link = row.link || "";
+  const type = row.type || "LINK";
+  const title = row.label || "Resource";
+  const taskCode = row.taskid ? String(row.taskid) : "";
+  const prefix = taskCode ? `${taskCode} · ` : "";
+  const disabled = link ? "" : " disabled";
+  const buttonLabel = getSmallResourceButtonLabel(type);
 
   return `
-    <div class="resource-card">
-      <div class="resource-card-main">
-        <span class="resource-type-badge">${escapeHtml(type)}</span>
-        <span class="resource-name">${safeName}</span>
+    <div class="student-resource-row">
+      <div class="student-resource-row-main">
+        <div class="student-resource-title">${escapeHtml(prefix + title)}</div>
+        <div class="student-resource-meta">
+          <span class="resource-type-badge small-badge">${escapeHtml(type)}</span>
+          <span>${escapeHtml(row.sublabel || row.source || "Resource")}</span>
+        </div>
       </div>
-
-      ${playerHtml}
-
-      <button class="resource-open-btn" onclick="openStudentResourceLink('${escapeForAttribute(link)}')">
-        ${getResourceActionLabel(type)}
+      <button class="resource-arrow-btn" onclick="openStudentResourceLink('${escapeForAttribute(link)}')"${disabled} aria-label="${escapeForAttribute(buttonLabel)}">
+        ›
       </button>
     </div>
   `;
@@ -630,24 +727,50 @@ function openStudentResourceLink(link) {
   window.open(link, "_blank", "noopener,noreferrer");
 }
 
-function getResourceActionLabel(type) {
+function getSmallResourceButtonLabel(type) {
   const resourceType = String(type || "").toUpperCase();
 
   if (resourceType === "PDF") return "Open PDF";
-  if (resourceType === "AUDIO") return "Open Audio";
-  if (resourceType === "VIDEO" || resourceType === "MOVIE") return "Open Video";
+  if (resourceType === "AUDIO") return "Play Audio";
+  if (resourceType === "VIDEO" || resourceType === "MOVIE") return "Watch Video";
   if (resourceType === "IMAGE" || resourceType === "VISUAL") return "Open Image";
-  if (resourceType === "TEXT") return "Open Text";
-  if (resourceType === "LINK") return "Open Link";
 
   return "Open Resource";
+}
+
+function getSortedResourceSubjects() {
+  return [...studentResourceSubjects].sort((a, b) => {
+    return String(a.subjectname || "").localeCompare(String(b.subjectname || ""), undefined, {
+      numeric: true,
+      sensitivity: "base"
+    });
+  });
+}
+
+function getTaskGroups(subject) {
+  if (!subject || !Array.isArray(subject.tasks)) return [];
+
+  return [...subject.tasks].sort((a, b) => sortByTaskId(a, b));
+}
+
+function resourceRowSorter(a, b) {
+  if (a.source !== b.source) {
+    // Show subject-level resources first, then task resources.
+    return a.source === "SUBJECT" ? -1 : 1;
+  }
+
+  const taskCompare = sortByTaskId(a, b);
+  if (taskCompare !== 0) return taskCompare;
+
+  return String(a.label || "").localeCompare(String(b.label || ""), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
 }
 
 function getSubjectResourceArray(subject) {
   if (!subject) return [];
 
-  // Backend normally returns subject.subjectResources.
-  // Extra variants are included to protect against casing or spelling differences.
   if (Array.isArray(subject.subjectResources)) return subject.subjectResources;
   if (Array.isArray(subject.subjectresources)) return subject.subjectresources;
   if (Array.isArray(subject.subject_resources)) return subject.subject_resources;
@@ -670,6 +793,24 @@ function getTaskResourceArray(task) {
   return [];
 }
 
+function getResourceType(resource) {
+  return String(resource.type || resource.resourcetype || "LINK").trim().toUpperCase();
+}
+
+function getResourceLink(resource) {
+  return String(resource.link || resource.resourcelink || "").trim();
+}
+
+function countResourcesForCategory(category) {
+  if (!category) return 0;
+
+  if (category.special === "surahs") {
+    return buildSurahResourceGroups().reduce((sum, group) => sum + group.rows.length, 0);
+  }
+
+  return buildMediaResourceGroups(category).reduce((sum, group) => sum + group.rows.length, 0);
+}
+
 function countResourcesForSubject(subject) {
   const subjectResources = getSubjectResourceArray(subject).length;
 
@@ -681,7 +822,6 @@ function countResourcesForSubject(subject) {
 
   return subjectResources + taskResources;
 }
-
 
 /* =========================
    SUBJECTS UI

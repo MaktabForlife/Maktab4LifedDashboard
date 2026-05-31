@@ -1108,3 +1108,123 @@ button:active {
     flex-direction: column;
   }
 }
+
+/* Student Resource Category Layout */
+.resource-category-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.resource-category-button {
+  background: var(--student-dark);
+  color: var(--white);
+  border-radius: 16px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  text-align: left;
+  gap: 12px;
+}
+
+.resource-category-button.is-empty {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.resource-category-main {
+  display: grid;
+  gap: 4px;
+}
+
+.resource-category-title {
+  font-family: 'Gagalin', Arial, sans-serif;
+  letter-spacing: 1px;
+  font-size: 1.08rem;
+}
+
+.resource-category-subtitle {
+  font-family: Arial, sans-serif;
+  font-size: 0.82rem;
+  opacity: 0.9;
+  letter-spacing: 0;
+}
+
+.resource-subject-group h3 {
+  border-bottom: 2px solid var(--student-dark);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.resource-task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.student-resource-row {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  gap: 10px;
+  align-items: center;
+  background: #e5e4e2;
+  border-radius: 12px;
+  padding: 10px;
+  text-align: left;
+  border-left: 5px solid var(--student-dark);
+}
+
+.student-resource-row-main {
+  min-width: 0;
+}
+
+.student-resource-title {
+  font-weight: bold;
+  color: #1f3f60;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.student-resource-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: #555;
+  font-size: 0.82rem;
+}
+
+.small-badge {
+  min-width: 46px;
+  padding: 4px 7px;
+  font-size: 0.68rem;
+}
+
+.resource-arrow-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  font-family: Arial, sans-serif;
+  font-size: 2rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resource-arrow-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 420px) {
+  .resource-category-button {
+    grid-template-columns: 1fr;
+  }
+
+  .resource-count-pill {
+    justify-self: start;
+  }
+}

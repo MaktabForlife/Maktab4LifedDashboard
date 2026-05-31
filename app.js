@@ -1112,10 +1112,7 @@ function renderIndividualStudentTaskList(rows) {
           <div class="student-status-row">
             <div class="student-status-name">${escapeHtml(row.taskname)}</div>
 
-
-
-           
-            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"}, this)">
+            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
               ${
                 isComplete
                   ? `<span class="status-tick status-tick-complete">✓</span>`
@@ -1123,7 +1120,7 @@ function renderIndividualStudentTaskList(rows) {
               }
             </div>
 
-            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"},this)">
+            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
               ${
                 isVerified
                   ? `<span class="status-tick status-tick-verified">✓</span>`

@@ -451,6 +451,215 @@ async function toggleStudentTask(studenttaskid, complete) {
   showStudentTasks();
 }
 
+
+/* =========================
+   STUDENT RESOURCE VIEW
+========================= */
+
+let studentResourceSubjects = [];
+let currentStudentResourceSubjectId = "";
+
+async function showStudentResources() {
+  showScreen("student-resources-subjects");
+
+  const container = document.getElementById("student-resource-subject-list");
+  container.innerHTML = `<p class="helper-text">Loading resources...</p>`;
+
+  const result = await apiPost("/api/student/resources/list", {}, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${escapeHtml(result.error || "Failed to load resources")}</p>`;
+    return;
+  }
+
+  studentResourceSubjects = result.subjects || [];
+
+  if (studentResourceSubjects.length === 0) {
+    container.innerHTML = `<p class="helper-text">No resources are available yet.</p>`;
+    return;
+  }
+
+  renderStudentResourceSubjects();
+}
+
+function renderStudentResourceSubjects() {
+  const container = document.getElementById("student-resource-subject-list");
+
+  const subjects = [...studentResourceSubjects].sort((a, b) => {
+    return String(a.subjectname || "").localeCompare(String(b.subjectname || ""), undefined, {
+      numeric: true,
+      sensitivity: "base"
+    });
+  });
+
+  container.innerHTML = subjects.map(subject => {
+    const count = Number(subject.resourceCount || countResourcesForSubject(subject) || 0);
+    const label = count === 1 ? "1 resource" : `${count} resources`;
+
+    return `
+      <button class="resource-subject-button" onclick="openStudentResourceSubject('${escapeForAttribute(subject.subjectid)}')">
+        <span class="resource-subject-title">${escapeHtml(subject.subjectname || "Subject")}</span>
+        <span class="resource-count-pill">${escapeHtml(label)}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+function openStudentResourceSubject(subjectid) {
+  const subject = studentResourceSubjects.find(item => String(item.subjectid) === String(subjectid));
+
+  if (!subject) {
+    alert("Subject resources not found. Please reload resources.");
+    return;
+  }
+
+  currentStudentResourceSubjectId = subjectid;
+  document.getElementById("student-resource-detail-title").innerText = subject.subjectname || "Resources";
+  showScreen("student-resources-detail");
+  renderStudentResourceDetail(subject);
+}
+
+function renderStudentResourceDetail(subject) {
+  const container = document.getElementById("student-resource-detail-content");
+
+  const subjectResources = Array.isArray(subject.subjectResources)
+    ? subject.subjectResources
+    : [];
+
+  const taskGroups = Array.isArray(subject.tasks)
+    ? subject.tasks
+    : [];
+
+  let html = "";
+
+  if (subjectResources.length > 0) {
+    html += `
+      <div class="resource-section">
+        <h3>Subject Resources</h3>
+        <div class="resource-list">
+          ${subjectResources.map(resource => renderStudentResourceItem(resource)).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  const tasksWithResources = taskGroups.filter(task => {
+    return Array.isArray(task.resources) && task.resources.length > 0;
+  });
+
+  if (tasksWithResources.length > 0) {
+    html += `
+      <div class="resource-section">
+        <h3>Task Resources</h3>
+        ${tasksWithResources.map(task => `
+          <div class="task-resource-group">
+            <div class="task-resource-heading">${escapeHtml(task.taskname || "Task")}</div>
+            <div class="resource-list">
+              ${task.resources.map(resource => renderStudentResourceItem(resource)).join("")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  if (!html) {
+    html = `<p class="helper-text">No resources are available for this subject yet.</p>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderStudentResourceItem(resource) {
+  const type = String(resource.type || resource.resourcetype || "LINK").trim().toUpperCase();
+  const name = resource.name || resource.resourcename || resource.taskresourcename || "Resource";
+  const link = resource.link || resource.resourcelink || "";
+
+  if (!link) {
+    return `
+      <div class="resource-card">
+        <div class="resource-card-main">
+          <span class="resource-type-badge">${escapeHtml(type)}</span>
+          <span class="resource-name">${escapeHtml(name)}</span>
+        </div>
+        <p class="helper-text">No link available.</p>
+      </div>
+    `;
+  }
+
+  const safeLink = escapeHtml(link);
+  const safeName = escapeHtml(name);
+
+  let playerHtml = "";
+
+  if (type === "AUDIO") {
+    playerHtml = `
+      <audio class="resource-player" controls preload="none">
+        <source src="${safeLink}">
+        Your browser does not support audio playback.
+      </audio>
+    `;
+  } else if (type === "VIDEO" || type === "MOVIE") {
+    playerHtml = `
+      <video class="resource-player" controls preload="metadata">
+        <source src="${safeLink}">
+        Your browser does not support video playback.
+      </video>
+    `;
+  }
+
+  return `
+    <div class="resource-card">
+      <div class="resource-card-main">
+        <span class="resource-type-badge">${escapeHtml(type)}</span>
+        <span class="resource-name">${safeName}</span>
+      </div>
+
+      ${playerHtml}
+
+      <button class="resource-open-btn" onclick="openStudentResourceLink('${escapeForAttribute(link)}')">
+        ${getResourceActionLabel(type)}
+      </button>
+    </div>
+  `;
+}
+
+function openStudentResourceLink(link) {
+  if (!link) {
+    return;
+  }
+
+  window.open(link, "_blank", "noopener,noreferrer");
+}
+
+function getResourceActionLabel(type) {
+  const resourceType = String(type || "").toUpperCase();
+
+  if (resourceType === "PDF") return "Open PDF";
+  if (resourceType === "AUDIO") return "Open Audio";
+  if (resourceType === "VIDEO" || resourceType === "MOVIE") return "Open Video";
+  if (resourceType === "IMAGE" || resourceType === "VISUAL") return "Open Image";
+  if (resourceType === "TEXT") return "Open Text";
+  if (resourceType === "LINK") return "Open Link";
+
+  return "Open Resource";
+}
+
+function countResourcesForSubject(subject) {
+  const subjectResources = Array.isArray(subject.subjectResources)
+    ? subject.subjectResources.length
+    : 0;
+
+  const taskResources = Array.isArray(subject.tasks)
+    ? subject.tasks.reduce((sum, task) => {
+        return sum + (Array.isArray(task.resources) ? task.resources.length : 0);
+      }, 0)
+    : 0;
+
+  return subjectResources + taskResources;
+}
+
+
 /* =========================
    SUBJECTS UI
 ========================= */

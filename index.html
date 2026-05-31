@@ -70,7 +70,7 @@
           <span>Tasks</span>
         </button>
 
-        <button class="home-card" onclick="showPlaceholder('Resources')">
+        <button class="home-card" onclick="showStudentResources()">
           <span class="card-icon">▤</span>
           <span>Resources</span>
         </button>
@@ -153,6 +153,29 @@
 
       <div id="student-task-list" class="list-stack">
         <p class="helper-text">Loading tasks...</p>
+      </div>
+    </section>
+
+    <!-- STUDENT RESOURCES -->
+    <section id="student-resources-subjects" class="screen student-theme">
+      <div class="nav-header">
+        <h2>Resources</h2>
+        <button class="small-btn" onclick="showScreen('student-home')">Back</button>
+      </div>
+
+      <div id="student-resource-subject-list" class="list-stack">
+        <p class="helper-text">Loading resources...</p>
+      </div>
+    </section>
+
+    <section id="student-resources-detail" class="screen student-theme">
+      <div class="nav-header">
+        <h2 id="student-resource-detail-title">Resources</h2>
+        <button class="small-btn" onclick="showScreen('student-resources-subjects')">Back</button>
+      </div>
+
+      <div id="student-resource-detail-content" class="list-stack">
+        <p class="helper-text">Loading resources...</p>
       </div>
     </section>
 

@@ -457,16 +457,10 @@ async function toggleStudentTask(studenttaskid, complete) {
 ========================= */
 
 let studentResourceSubjects = [];
+let studentResourceGroupsByType = {};
 let currentStudentResourceMode = "";
 
 const STUDENT_RESOURCE_CATEGORIES = [
-  {
-    key: "SURAHS",
-    label: "Surahs",
-    subtitle: "Surah task resources",
-    types: null,
-    special: "surahs"
-  },
   {
     key: "PDF",
     label: "PDF",
@@ -506,9 +500,69 @@ async function showStudentResources() {
     return;
   }
 
+  // New backend response is grouped by media type: result.groups / result.pdf / result.audio / etc.
+  // Older response shape used result.subjects. Keep both supported.
   studentResourceSubjects = Array.isArray(result.subjects) ? result.subjects : [];
+  studentResourceGroupsByType = normalizeStudentResourceGroups(result);
 
   renderStudentResourceCategories();
+}
+
+
+function normalizeStudentResourceGroups(result) {
+  const map = {};
+
+  function addGroup(group) {
+    if (!group) return;
+
+    const type = String(group.type || group.key || "").trim().toUpperCase();
+    if (!type) return;
+
+    map[type] = {
+      type,
+      count: Number(group.count || 0),
+      subjects: Array.isArray(group.subjects) ? group.subjects : []
+    };
+  }
+
+  if (Array.isArray(result.groups)) {
+    result.groups.forEach(addGroup);
+  }
+
+  addGroup(result.pdf);
+  addGroup(result.audio);
+  addGroup(result.video);
+  addGroup(result.other);
+
+  // Recalculate count from rows if the backend did not set count.
+  Object.keys(map).forEach(type => {
+    const calculatedCount = map[type].subjects.reduce((sum, subject) => {
+      return sum + getDirectSubjectResources(subject).length;
+    }, 0);
+
+    if (!map[type].count && calculatedCount) {
+      map[type].count = calculatedCount;
+    }
+  });
+
+  return map;
+}
+
+function getDirectMediaGroup(category) {
+  if (!category) return null;
+  const key = String(category.key || "").trim().toUpperCase();
+  return studentResourceGroupsByType[key] || null;
+}
+
+function getDirectSubjectResources(subject) {
+  if (!subject) return [];
+
+  if (Array.isArray(subject.resources)) return subject.resources;
+  if (Array.isArray(subject.Resources)) return subject.Resources;
+  if (Array.isArray(subject.resourceList)) return subject.resourceList;
+  if (Array.isArray(subject.items)) return subject.items;
+
+  return [];
 }
 
 function renderStudentResourceCategories() {
@@ -566,13 +620,7 @@ function renderStudentResourceCategoryDetail(category) {
   const container = document.getElementById("student-resource-detail-content");
   if (!container) return;
 
-  let groups = [];
-
-  if (category.special === "surahs") {
-    groups = buildSurahResourceGroups();
-  } else {
-    groups = buildMediaResourceGroups(category);
-  }
+  const groups = buildMediaResourceGroups(category);
 
   if (groups.length === 0) {
     container.innerHTML = `<p class="helper-text">No ${escapeHtml(category.label)} resources are available yet.</p>`;
@@ -630,11 +678,64 @@ function buildSurahResourceGroups() {
 }
 
 function buildMediaResourceGroups(category) {
+  const directGroup = getDirectMediaGroup(category);
+
+  // Preferred new shape from Apps Script:
+  // { groups: [{ type: "AUDIO", subjects: [{ subjectname, resources: [...] }] }] }
+  if (directGroup) {
+    const groups = [];
+
+    (directGroup.subjects || []).forEach(subject => {
+      const rows = [];
+      const seenRows = new Set();
+
+      getDirectSubjectResources(subject).forEach(resource => {
+        const type = getResourceType(resource);
+        const link = getResourceLink(resource);
+        const label = resource.label || resource.name || resource.resourcename || resource.taskresourcename || "Resource";
+
+        addUniqueResourceRow(rows, seenRows, {
+          subject,
+          task: null,
+          resource,
+          taskid: resource.taskid || "",
+          taskname: label,
+          label,
+          sublabel: type,
+          link,
+          type,
+          source: resource.source || "RESOURCE"
+        });
+      });
+
+      rows.sort(resourceRowSorter);
+
+      if (rows.length > 0) {
+        groups.push({
+          subjectid: subject.subjectid,
+          subjectname: subject.subjectname || subject.name || "Subject",
+          rows
+        });
+      }
+    });
+
+    groups.sort((a, b) => {
+      return String(a.subjectname || "").localeCompare(String(b.subjectname || ""), undefined, {
+        numeric: true,
+        sensitivity: "base"
+      });
+    });
+
+    return groups;
+  }
+
+  // Backward-compatible fallback for the older subject/task response shape.
   const groups = [];
   const allowedTypes = new Set((category.types || []).map(type => String(type).toUpperCase()));
 
   getSortedResourceSubjects().forEach(subject => {
     const rows = [];
+    const seenRows = new Set();
 
     getSubjectResourceArray(subject).forEach(resource => {
       const type = getResourceType(resource);
@@ -643,14 +744,14 @@ function buildMediaResourceGroups(category) {
         return;
       }
 
-      rows.push({
+      addUniqueResourceRow(rows, seenRows, {
         subject,
         task: null,
         resource,
         taskid: "",
         taskname: "Subject Resource",
         label: resource.name || resource.resourcename || "Subject Resource",
-        sublabel: "Subject Resource",
+        sublabel: type,
         link: getResourceLink(resource),
         type,
         source: "SUBJECT"
@@ -665,14 +766,14 @@ function buildMediaResourceGroups(category) {
           return;
         }
 
-        rows.push({
+        addUniqueResourceRow(rows, seenRows, {
           subject,
           task,
           resource,
           taskid: task.taskid,
-          taskname: task.taskname || "Task",
+          taskname: task.taskname || resource.name || resource.taskresourcename || "Task Resource",
           label: task.taskname || resource.name || resource.taskresourcename || "Task Resource",
-          sublabel: getResourceType(resource),
+          sublabel: type,
           link: getResourceLink(resource),
           type,
           source: "TASK"
@@ -685,7 +786,7 @@ function buildMediaResourceGroups(category) {
     if (rows.length > 0) {
       groups.push({
         subjectid: subject.subjectid,
-        subjectname: subject.subjectname,
+        subjectname: subject.subjectname || "Subject",
         rows
       });
     }
@@ -694,19 +795,50 @@ function buildMediaResourceGroups(category) {
   return groups;
 }
 
+function addUniqueResourceRow(rows, seenRows, row) {
+  const key = getResourceDedupeKey(row);
+
+  if (seenRows.has(key)) {
+    return;
+  }
+
+  seenRows.add(key);
+  rows.push(row);
+}
+
+function getResourceDedupeKey(row) {
+  const subjectId = String(row.subject && row.subject.subjectid || "").trim().toUpperCase();
+  const taskId = String(row.taskid || "").trim().toUpperCase();
+  const resource = row.resource || {};
+  const resourceId = String(
+    resource.id ||
+    resource.resourceid ||
+    resource.taskresourceid ||
+    ""
+  ).trim().toUpperCase();
+  const type = String(row.type || "").trim().toUpperCase();
+  const link = String(row.link || "").trim();
+  const label = String(row.label || "").trim().toUpperCase();
+  const source = String(row.source || "").trim().toUpperCase();
+
+  if (resourceId) {
+    return [source, subjectId, taskId, resourceId].join("|");
+  }
+
+  return [source, subjectId, taskId, type, link, label].join("|");
+}
+
 function renderStudentResourceRow(row) {
   const link = row.link || "";
   const type = row.type || "LINK";
   const title = row.label || "Resource";
-  const taskCode = row.taskid ? String(row.taskid) : "";
-  const prefix = taskCode ? `${taskCode} · ` : "";
   const disabled = link ? "" : " disabled";
   const buttonLabel = getSmallResourceButtonLabel(type);
 
   return `
     <div class="student-resource-row">
       <div class="student-resource-row-main">
-        <div class="student-resource-title">${escapeHtml(prefix + title)}</div>
+        <div class="student-resource-title">${escapeHtml(title)}</div>
         <div class="student-resource-meta">
           <span class="resource-type-badge small-badge">${escapeHtml(type)}</span>
           <span>${escapeHtml(row.sublabel || row.source || "Resource")}</span>
@@ -804,8 +936,11 @@ function getResourceLink(resource) {
 function countResourcesForCategory(category) {
   if (!category) return 0;
 
-  if (category.special === "surahs") {
-    return buildSurahResourceGroups().reduce((sum, group) => sum + group.rows.length, 0);
+  const directGroup = getDirectMediaGroup(category);
+  if (directGroup) {
+    return directGroup.subjects.reduce((sum, subject) => {
+      return sum + getDirectSubjectResources(subject).length;
+    }, 0);
   }
 
   return buildMediaResourceGroups(category).reduce((sum, group) => sum + group.rows.length, 0);

@@ -181,6 +181,32 @@ button:active {
     font-size: 0.78rem;
   }
 }
+.student-task-header-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.student-task-header-row h2 {
+  margin: 0;
+  text-align: left;
+  line-height: 1.05;
+}
+
+@media (max-width: 520px) {
+  .student-task-header-row {
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+
+  .student-task-header-row h2 {
+    font-size: 1.2rem;
+  }
+}
+
+
 
 
 .small-btn {

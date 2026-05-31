@@ -824,10 +824,29 @@ button:active {
 
 @media (max-width: 640px) {
   .progress-student-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(95px, 1fr) 72px 72px;
+    gap: 6px;
+    padding: 10px 8px;
+  }
+
+  .progress-student-name {
+    font-size: 0.95rem;
+    line-height: 1.05;
+    overflow-wrap: anywhere;
   }
 
   .status-toggle {
-    width: 100%;
+    width: 72px;
+    min-width: 72px;
+    min-height: 42px;
+    padding: 5px 4px;
+    font-size: 0.68rem;
+    line-height: 1.05;
+    white-space: normal;
+    text-align: center;
   }
+}
+.status-toggle {
+  white-space: normal;
+  line-height: 1.1;
 }

@@ -383,7 +383,7 @@ function renderStudentSubjectTaskList() {
       <div class="student-status-row">
         <div class="student-status-name">${escapeHtml(task.taskname)}</div>
 
-        <div class="status-action" onclick="toggleStudentSubjectTask('${task.studenttaskid}', ${isComplete ? "false" : "true"})">
+        <div class="status-action" onclick="toggleStudentSubjectTask('${task.studenttaskid}', ${isComplete ? "false" : "true"},this)">
           ${
             isComplete
               ? `<span class="status-tick status-tick-complete">✓</span>`
@@ -402,6 +402,49 @@ function renderStudentSubjectTaskList() {
     `;
   }).join("");
 }
+
+async function toggleStudentSubjectTask(studenttaskid, complete, element) {
+  const oldValue = !complete;
+
+  // Update the screen immediately.
+  updateProgressPendingElement(element, "completeStatus", complete);
+
+  // Update the local task data immediately.
+  Object.values(studentSubjectTaskGroups).forEach(subject => {
+    subject.tasks.forEach(task => {
+      if (String(task.studenttaskid) === String(studenttaskid)) {
+        task.completestatus = complete ? "YES" : "";
+      }
+    });
+  });
+
+  try {
+    const result = await apiPost("/api/tasks/update-complete", {
+      studenttaskid,
+      complete
+    }, state.token);
+
+    if (!result.success) {
+      throw new Error(result.error || "Could not update task.");
+    }
+  } catch (err) {
+    // Revert the screen if the save fails.
+    updateProgressPendingElement(element, "completeStatus", oldValue);
+
+    Object.values(studentSubjectTaskGroups).forEach(subject => {
+      subject.tasks.forEach(task => {
+        if (String(task.studenttaskid) === String(studenttaskid)) {
+          task.completestatus = oldValue ? "YES" : "";
+        }
+      });
+    });
+
+    alert(err.message || "Could not update task.");
+  }
+}
+
+
+
 
 async function toggleStudentSubjectTask(studenttaskid, complete) {
   const result = await apiPost("/api/tasks/update-complete", {
@@ -425,7 +468,7 @@ async function toggleStudentSubjectTask(studenttaskid, complete) {
   renderStudentSubjectTaskList();
 }
 
-async function toggleStudentTask(studenttaskid, complete) {
+/* async function toggleStudentTask(studenttaskid, complete) {
   const result = await apiPost("/api/tasks/update-complete", {
     studenttaskid,
     complete
@@ -438,6 +481,9 @@ async function toggleStudentTask(studenttaskid, complete) {
 
   showStudentTasks();
 }
+*/
+
+
 
 /* =========================
    SUBJECTS UI
@@ -1112,16 +1158,14 @@ function renderIndividualStudentTaskList(rows) {
           <div class="student-status-row">
             <div class="student-status-name">${escapeHtml(row.taskname)}</div>
 
-            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
-              ${
+<div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"}, this)">              ${
                 isComplete
                   ? `<span class="status-tick status-tick-complete">✓</span>`
                   : `To be<br>completed`
               }
             </div>
 
-            <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
-              ${
+<div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"}, this)">              ${
                 isVerified
                   ? `<span class="status-tick status-tick-verified">✓</span>`
                   : `To be<br>verified`
@@ -1143,7 +1187,9 @@ function renderIndividualStudentTaskList(rows) {
 
 function toggleProgressPending(studentTaskId, field, value, element) {
   if (!progressPendingUpdates[studentTaskId]) {
-    progressPendingUpdates[studentTaskId] = {};
+    progressPendingUpdates[studentTaskId] = {
+      studenttaskid: studentTaskId
+    };
   }
 
   progressPendingUpdates[studentTaskId][field] = value;
@@ -1152,6 +1198,8 @@ function toggleProgressPending(studentTaskId, field, value, element) {
     updateProgressPendingElement(element, field, value);
   }
 }
+
+
 function updateProgressPendingElement(element, field, value) {
   if (field === "completeStatus") {
     if (value) {
@@ -1186,7 +1234,7 @@ async function saveProgressPendingChanges() {
     if (update.completeStatus !== undefined) {
       const completeResult = await apiPost("/api/tasks/update-complete", {
         studenttaskid: update.studenttaskid,
-        complete: update.completeStatus !== ""
+       complete: !!update.completeStatus
       }, state.token);
 
       if (!completeResult.success) {
@@ -1198,7 +1246,7 @@ async function saveProgressPendingChanges() {
     if (update.verifyStatus !== undefined) {
       const verifyResult = await apiPost("/api/admin/tasks/verify", {
         studenttaskid: update.studenttaskid,
-        verified: update.verifyStatus !== ""
+        verified: !!update.verifyStatus
       }, state.token);
 
       if (!verifyResult.success) {

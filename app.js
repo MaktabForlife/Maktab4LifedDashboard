@@ -522,9 +522,7 @@ function openStudentResourceSubject(subjectid) {
 function renderStudentResourceDetail(subject) {
   const container = document.getElementById("student-resource-detail-content");
 
-  const subjectResources = Array.isArray(subject.subjectResources)
-    ? subject.subjectResources
-    : [];
+  const subjectResources = getSubjectResourceArray(subject);
 
   const taskGroups = Array.isArray(subject.tasks)
     ? subject.tasks
@@ -544,7 +542,7 @@ function renderStudentResourceDetail(subject) {
   }
 
   const tasksWithResources = taskGroups.filter(task => {
-    return Array.isArray(task.resources) && task.resources.length > 0;
+    return getTaskResourceArray(task).length > 0;
   });
 
   if (tasksWithResources.length > 0) {
@@ -555,7 +553,7 @@ function renderStudentResourceDetail(subject) {
           <div class="task-resource-group">
             <div class="task-resource-heading">${escapeHtml(task.taskname || "Task")}</div>
             <div class="resource-list">
-              ${task.resources.map(resource => renderStudentResourceItem(resource)).join("")}
+              ${getTaskResourceArray(task).map(resource => renderStudentResourceItem(resource)).join("")}
             </div>
           </div>
         `).join("")}
@@ -645,14 +643,39 @@ function getResourceActionLabel(type) {
   return "Open Resource";
 }
 
+function getSubjectResourceArray(subject) {
+  if (!subject) return [];
+
+  // Backend normally returns subject.subjectResources.
+  // Extra variants are included to protect against casing or spelling differences.
+  if (Array.isArray(subject.subjectResources)) return subject.subjectResources;
+  if (Array.isArray(subject.subjectresources)) return subject.subjectresources;
+  if (Array.isArray(subject.subject_resources)) return subject.subject_resources;
+  if (Array.isArray(subject.SubjectResources)) return subject.SubjectResources;
+  if (Array.isArray(subject.subjectResoureces)) return subject.subjectResoureces;
+  if (Array.isArray(subject.subjectresoureces)) return subject.subjectresoureces;
+
+  return [];
+}
+
+function getTaskResourceArray(task) {
+  if (!task) return [];
+
+  if (Array.isArray(task.resources)) return task.resources;
+  if (Array.isArray(task.taskResources)) return task.taskResources;
+  if (Array.isArray(task.taskresources)) return task.taskresources;
+  if (Array.isArray(task.task_resources)) return task.task_resources;
+  if (Array.isArray(task.TaskResources)) return task.TaskResources;
+
+  return [];
+}
+
 function countResourcesForSubject(subject) {
-  const subjectResources = Array.isArray(subject.subjectResources)
-    ? subject.subjectResources.length
-    : 0;
+  const subjectResources = getSubjectResourceArray(subject).length;
 
   const taskResources = Array.isArray(subject.tasks)
     ? subject.tasks.reduce((sum, task) => {
-        return sum + (Array.isArray(task.resources) ? task.resources.length : 0);
+        return sum + getTaskResourceArray(task).length;
       }, 0)
     : 0;
 

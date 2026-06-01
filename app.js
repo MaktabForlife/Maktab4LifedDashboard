@@ -546,13 +546,13 @@ const STUDENT_RESOURCE_CATEGORIES = [
 async function showStudentResources() {
   studentResourceViewMode = "student";
   setResourceScreensForStudent();
-  await loadResourceCategories("/api/student/resources/list", {});
+  await loadResourceCategories("/api/resources/list", {});
 }
 
 async function showAdminResources() {
   studentResourceViewMode = "admin";
   setResourceScreensForAdmin();
-  await loadResourceCategories("/api/admin/resources/list", {});
+  await loadResourceCategories("/api/resources/list", {});
 }
 
 function setResourceScreensForStudent() {
@@ -610,7 +610,25 @@ async function loadResourceCategories(apiPath, body = {}) {
   container.innerHTML = `<p class="helper-text">Loading resources...</p>`;
 
   try {
-    const result = await apiPost(apiPath, body, state.token);
+    let result = await apiPost(apiPath, body, state.token);
+
+    // Temporary compatibility fallback while the Worker routes are being stabilised.
+    // Resources are now common to students and staff, so all resource routes should return the same library.
+    if (!result.success && String(result.error || "").toLowerCase() === "not found") {
+      const fallbackPaths = [
+        "/api/resources/list",
+        "/api/student/resources/list",
+        "/api/admin/resources/list"
+      ].filter(path => path !== apiPath);
+
+      for (const fallbackPath of fallbackPaths) {
+        const fallbackResult = await apiPost(fallbackPath, body, state.token);
+        if (fallbackResult && fallbackResult.success) {
+          result = fallbackResult;
+          break;
+        }
+      }
+    }
 
     if (!result.success) {
       container.innerHTML = `<p class="error-message">${escapeHtml(result.error || "Failed to load resources")}</p>`;

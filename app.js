@@ -917,6 +917,7 @@ function buildMediaResourceGroups(category) {
       });
     });
 
+    
     getTaskGroups(subject).forEach(task => {
       getTaskResourceArray(task).forEach(resource => {
         const type = getResourceType(resource, category.key);

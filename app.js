@@ -511,6 +511,7 @@ async function toggleStudentTask(studenttaskid, complete) {
 let studentResourceSubjects = [];
 let studentResourceGroupsByType = {};
 let currentStudentResourceMode = "";
+let studentResourceViewMode = "student";
 
 const PDFJS_VIEWER_PATH = "/pdfjs-6/web/viewer.html";
 
@@ -543,13 +544,73 @@ const STUDENT_RESOURCE_CATEGORIES = [
 ];
 
 async function showStudentResources() {
+  studentResourceViewMode = "student";
+  setResourceScreensForStudent();
+  await loadResourceCategories("/api/student/resources/list", {});
+}
+
+async function showAdminResources() {
+  studentResourceViewMode = "admin";
+  setResourceScreensForAdmin();
+  await loadResourceCategories("/api/admin/resources/list", {});
+}
+
+function setResourceScreensForStudent() {
+  ["student-resources-subjects", "student-resources-detail"].forEach(id => {
+    const screen = document.getElementById(id);
+    if (!screen) return;
+    screen.classList.remove("admin-theme");
+    screen.classList.add("student-theme");
+  });
+
+  const listTitle = document.querySelector("#student-resources-subjects h2");
+  if (listTitle) listTitle.innerText = "Resources";
+
+  const listBackButton = document.querySelector("#student-resources-subjects .small-btn");
+  if (listBackButton) {
+    listBackButton.innerText = "Back";
+    listBackButton.setAttribute("onclick", "showScreen('student-home')");
+  }
+
+  const detailBackButton = document.querySelector("#student-resources-detail .small-btn");
+  if (detailBackButton) {
+    detailBackButton.innerText = "Back";
+    detailBackButton.setAttribute("onclick", "showScreen('student-resources-subjects')");
+  }
+}
+
+function setResourceScreensForAdmin() {
+  ["student-resources-subjects", "student-resources-detail"].forEach(id => {
+    const screen = document.getElementById(id);
+    if (!screen) return;
+    screen.classList.remove("student-theme");
+    screen.classList.add("admin-theme");
+  });
+
+  const listTitle = document.querySelector("#student-resources-subjects h2");
+  if (listTitle) listTitle.innerText = "Resources";
+
+  const listBackButton = document.querySelector("#student-resources-subjects .small-btn");
+  if (listBackButton) {
+    listBackButton.innerText = "Back";
+    listBackButton.setAttribute("onclick", "showScreen('admin-academics')");
+  }
+
+  const detailBackButton = document.querySelector("#student-resources-detail .small-btn");
+  if (detailBackButton) {
+    detailBackButton.innerText = "Back";
+    detailBackButton.setAttribute("onclick", "showScreen('student-resources-subjects')");
+  }
+}
+
+async function loadResourceCategories(apiPath, body = {}) {
   showScreen("student-resources-subjects");
 
   const container = document.getElementById("student-resource-subject-list");
   container.innerHTML = `<p class="helper-text">Loading resources...</p>`;
 
   try {
-    const result = await apiPost("/api/student/resources/list", {}, state.token);
+    const result = await apiPost(apiPath, body, state.token);
 
     if (!result.success) {
       container.innerHTML = `<p class="error-message">${escapeHtml(result.error || "Failed to load resources")}</p>`;
@@ -1508,6 +1569,38 @@ async function saveSubjectChanges() {
    TEACHER / ADMIN PROGRESS DRILLDOWN
 ========================= */
 
+function normalizeProgressSubject(subject) {
+  return {
+    ...subject,
+    subjectid: getStudentTaskField(subject, ["subjectid", "subjectID", "SubjectID", "SubjectId"]),
+    subjectname: getStudentTaskField(subject, ["subjectname", "subjectName", "SubjectName", "Subject"], "Other")
+  };
+}
+
+function normalizeProgressTask(task) {
+  return {
+    ...task,
+    taskid: getStudentTaskField(task, ["taskid", "taskID", "TaskID", "TaskId"]),
+    taskname: getStudentTaskField(task, ["taskname", "taskName", "TaskName", "Task"], "Untitled Task"),
+    subjectid: getStudentTaskField(task, ["subjectid", "subjectID", "SubjectID", "SubjectId"]),
+    subjectname: getStudentTaskField(task, ["subjectname", "subjectName", "SubjectName", "Subject"], "Other"),
+    moduleid: getStudentTaskField(task, ["moduleid", "moduleID", "ModuleID", "ModuleId"]),
+    modulename: getStudentTaskField(task, ["modulename", "moduleName", "ModuleName", "Module"], "General")
+  };
+}
+
+function normalizeProgressStudentRow(row) {
+  return normalizeStudentTask(row);
+}
+
+function sortProgressSubjects(a, b) {
+  return sortSubjectGroupsBySubjectId(normalizeProgressSubject(a), normalizeProgressSubject(b));
+}
+
+function sortProgressTasks(a, b) {
+  return sortBySubjectIdThenTask(normalizeProgressTask(a), normalizeProgressTask(b));
+}
+
 const progressState = {
   contextType: null,
   classgroup: "ALL",
@@ -1687,8 +1780,10 @@ async function loadProgressSubjects() {
     return;
   }
 
-  container.innerHTML = result.subjects.map(subject => `
-    <button class="progress-list-button" onclick="openProgressSubject('${subject.subjectid}', '${escapeForAttribute(subject.subjectname)}')">
+  const subjects = result.subjects.map(normalizeProgressSubject).sort(sortProgressSubjects);
+
+  container.innerHTML = subjects.map(subject => `
+    <button class="progress-list-button" onclick="openProgressSubject('${escapeForAttribute(subject.subjectid)}', '${escapeForAttribute(subject.subjectname)}')">
       <span class="progress-list-title">${escapeHtml(subject.subjectname)}</span>
       ${renderProgressBars(subject.completedPercent, subject.verifiedPercent)}
     </button>
@@ -1734,10 +1829,10 @@ async function loadProgressTasks() {
     return;
   }
 
-  const sortedTasks = [...result.tasks].sort(sortByTaskId);
+  const sortedTasks = result.tasks.map(normalizeProgressTask).sort(sortProgressTasks);
 
   container.innerHTML = sortedTasks.map(task => `
-    <button class="progress-list-button" onclick="openProgressTask('${task.taskid}', '${escapeForAttribute(task.taskname)}')">
+    <button class="progress-list-button" onclick="openProgressTask('${escapeForAttribute(task.taskid)}', '${escapeForAttribute(task.taskname)}')">
       <span class="progress-list-title">${escapeHtml(task.taskname)}</span>
       ${renderProgressBars(task.completedPercent, task.verifiedPercent)}
     </button>
@@ -1782,7 +1877,7 @@ async function loadProgressTaskStudents() {
     return;
   }
 
-  currentProgressRows = result.students;
+  currentProgressRows = result.students.map(normalizeProgressStudentRow);
   renderProgressTaskStudents(currentProgressRows);
 }
 
@@ -1876,7 +1971,7 @@ async function loadIndividualStudentTaskList() {
     return;
   }
 
-  currentProgressRows = result.students;
+  currentProgressRows = result.students.map(normalizeProgressStudentRow);
   renderIndividualStudentTaskList(currentProgressRows);
 }
 
@@ -1885,60 +1980,79 @@ function renderIndividualStudentTaskList(rows) {
 
   const bySubject = {};
 
-  rows.forEach(row => {
-    if (!bySubject[row.subjectname]) {
-      bySubject[row.subjectname] = [];
+  rows.map(normalizeProgressStudentRow).sort(sortBySubjectIdThenTask).forEach(row => {
+    const subjectKey = row.subjectid || row.subjectname || "Other";
+    const moduleKey = row.moduleid || row.modulename || "General";
+
+    if (!bySubject[subjectKey]) {
+      bySubject[subjectKey] = {
+        subjectid: row.subjectid || subjectKey,
+        subjectname: row.subjectname || "Other",
+        modules: {}
+      };
     }
 
-    bySubject[row.subjectname].push(row);
+    if (!bySubject[subjectKey].modules[moduleKey]) {
+      bySubject[subjectKey].modules[moduleKey] = {
+        moduleid: row.moduleid || moduleKey,
+        modulename: row.modulename || "General",
+        rows: []
+      };
+    }
+
+    bySubject[subjectKey].modules[moduleKey].rows.push(row);
   });
 
   let html = "";
-  const subjectNames = Object.keys(bySubject).sort();
+  const subjects = Object.values(bySubject).sort(sortSubjectGroupsBySubjectId);
 
-  subjectNames.forEach((subjectName, index) => {
+  subjects.forEach((subject, subjectIndex) => {
     if (progressState.subjectid === "ALL") {
-      if (index > 0) {
+      if (subjectIndex > 0) {
         html += `<div class="group-separator-line" aria-hidden="true"></div>`;
       }
-      html += `<div class="subject-heading-thin">${escapeHtml(subjectName)}</div>`;
+      html += `<div class="subject-heading-thin">${escapeHtml(subject.subjectname)}</div>`;
     }
 
-    [...bySubject[subjectName]].sort(sortByTaskId).forEach(row => {
-      const pending = progressPendingUpdates[row.studenttaskid] || {};
+    Object.values(subject.modules).sort(sortModuleGroupsByModuleId).forEach(moduleGroup => {
+      html += `<div class="task-resource-heading">${escapeHtml(moduleGroup.modulename || "General")}</div>`;
 
-      const completeStatus = pending.completeStatus !== undefined
-        ? pending.completeStatus
-        : row.completestatus;
+      moduleGroup.rows.sort(sortBySubjectIdThenTask).forEach(row => {
+        const pending = progressPendingUpdates[row.studenttaskid] || {};
 
-      const verifyStatus = pending.verifyStatus !== undefined
-        ? pending.verifyStatus
-        : row.verifystatus;
+        const completeStatus = pending.completeStatus !== undefined
+          ? pending.completeStatus
+          : row.completestatus;
 
-      const isComplete = !!completeStatus;
-      const isVerified = !!verifyStatus;
+        const verifyStatus = pending.verifyStatus !== undefined
+          ? pending.verifyStatus
+          : row.verifystatus;
 
-      html += `
-        <div class="student-status-row">
-          <div class="student-status-name">${escapeHtml(row.taskname)}</div>
+        const isComplete = isStatusOn(completeStatus);
+        const isVerified = isStatusOn(verifyStatus);
 
-          <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'completeStatus', ${isComplete ? "false" : "true"})">
-            ${
-              isComplete
-                ? `<span class="status-tick status-tick-complete">✓</span>`
-                : `To be<br>completed`
-            }
+        html += `
+          <div class="student-status-row">
+            <div class="student-status-name">${escapeHtml(row.taskname)}</div>
+
+            <div class="status-action" onclick="toggleProgressPending('${escapeForAttribute(row.studenttaskid)}', 'completeStatus', ${isComplete ? "false" : "true"})">
+              ${
+                isComplete
+                  ? `<span class="status-tick status-tick-complete">✓</span>`
+                  : `To be<br>completed`
+              }
+            </div>
+
+            <div class="status-action" onclick="toggleProgressPending('${escapeForAttribute(row.studenttaskid)}', 'verifyStatus', ${isVerified ? "false" : "true"})">
+              ${
+                isVerified
+                  ? `<span class="status-tick status-tick-verified">✓</span>`
+                  : `To be<br>verified`
+              }
+            </div>
           </div>
-
-          <div class="status-action" onclick="toggleProgressPending('${row.studenttaskid}', 'verifyStatus', ${isVerified ? "false" : "true"})">
-            ${
-              isVerified
-                ? `<span class="status-tick status-tick-verified">✓</span>`
-                : `To be<br>verified`
-            }
-          </div>
-        </div>
-      `;
+        `;
+      });
     });
   });
 

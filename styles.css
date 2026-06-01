@@ -1228,3 +1228,21 @@ button:active {
     justify-self: start;
   }
 }
+
+
+/* Inline audio player for student resources */
+.inline-audio-player {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.resource-audio-control {
+  width: 100%;
+  display: block;
+  margin-top: 8px;
+}
+
+.student-resource-meta .resource-type-badge {
+  margin-right: 0;
+}

@@ -462,28 +462,29 @@ let currentStudentResourceMode = "";
 
 const STUDENT_RESOURCE_CATEGORIES = [
   {
-    key: "PDF",
-    label: "PDF",
-    subtitle: "Books and worksheets",
-    types: ["PDF"]
+    key: "EBOOKS",
+    label: "eBooks",
+    subtitle: "Books and reading resources"
+  },
+  {
+    key: "PRINTABLES",
+    label: "Printables",
+    subtitle: "Worksheets and printable files"
   },
   {
     key: "AUDIO",
     label: "Audio",
-    subtitle: "Listening resources",
-    types: ["AUDIO"]
+    subtitle: "Listening resources"
   },
   {
     key: "VIDEO",
     label: "Video",
-    subtitle: "Movie and video resources",
-    types: ["VIDEO", "MOVIE"]
+    subtitle: "Movie and video resources"
   },
   {
     key: "OTHER",
     label: "Other",
-    subtitle: "Images, links, text and other files",
-    types: ["IMAGE", "VISUAL", "LINK", "TEXT", "OTHER"]
+    subtitle: "Images, links, text and other files"
   }
 ];
 
@@ -529,10 +530,14 @@ function normalizeStudentResourceGroups(result) {
     result.groups.forEach(addGroup);
   }
 
-  addGroup(result.pdf);
+  addGroup(result.ebooks);
+  addGroup(result.printables);
   addGroup(result.audio);
   addGroup(result.video);
   addGroup(result.other);
+
+  // Backward compatibility if an older backend still sends PDF instead of eBooks/Printables.
+  addGroup(result.pdf);
 
   // Recalculate count from rows if the backend did not set count.
   Object.keys(map).forEach(type => {
@@ -830,25 +835,104 @@ function getResourceDedupeKey(row) {
 
 function renderStudentResourceRow(row) {
   const link = row.link || "";
-  const type = row.type || "LINK";
-  const title = row.label || "Resource";
+  const type = String(row.type || "LINK").toUpperCase();
+  const title = row.label || row.name || "Resource";
   const disabled = link ? "" : " disabled";
   const buttonLabel = getSmallResourceButtonLabel(type);
+  const rowId = makeResourceRowId(row);
+
+  const actionHtml = type === "AUDIO"
+    ? `
+      <button class="resource-arrow-btn" onclick="toggleInlineAudioPlayer('${escapeForAttribute(rowId)}', '${escapeForAttribute(link)}')"${disabled} aria-label="${escapeForAttribute(buttonLabel)}">
+        ›
+      </button>
+    `
+    : `
+      <button class="resource-arrow-btn" onclick="openStudentResourceLink('${escapeForAttribute(link)}')"${disabled} aria-label="${escapeForAttribute(buttonLabel)}">
+        ›
+      </button>
+    `;
+
+  const playerHtml = type === "AUDIO"
+    ? `<div id="${escapeForAttribute(rowId)}" class="inline-audio-player hidden"></div>`
+    : "";
 
   return `
     <div class="student-resource-row">
       <div class="student-resource-row-main">
         <div class="student-resource-title">${escapeHtml(title)}</div>
         <div class="student-resource-meta">
-          <span class="resource-type-badge small-badge">${escapeHtml(type)}</span>
-          <span>${escapeHtml(row.sublabel || row.source || "Resource")}</span>
+          <span class="resource-type-badge small-badge">${escapeHtml(getDisplayResourceType(type))}</span>
         </div>
+        ${playerHtml}
       </div>
-      <button class="resource-arrow-btn" onclick="openStudentResourceLink('${escapeForAttribute(link)}')"${disabled} aria-label="${escapeForAttribute(buttonLabel)}">
-        ›
-      </button>
+      ${actionHtml}
     </div>
   `;
+}
+
+function makeResourceRowId(row) {
+  const raw = [
+    row.source || "resource",
+    row.subject && row.subject.subjectname || "subject",
+    row.label || row.name || "item",
+    row.link || "link"
+  ].join("-");
+
+  return "audio-player-" + raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function getDisplayResourceType(type) {
+  const resourceType = String(type || "").toUpperCase();
+
+  if (resourceType === "EBOOKS") return "EBOOK";
+  if (resourceType === "PRINTABLES") return "PRINT";
+  if (resourceType === "AUDIO") return "AUDIO";
+  if (resourceType === "VIDEO") return "VIDEO";
+  if (resourceType === "OTHER") return "OTHER";
+
+  return resourceType || "LINK";
+}
+
+function toggleInlineAudioPlayer(playerId, link) {
+  if (!link) {
+    return;
+  }
+
+  const playerBox = document.getElementById(playerId);
+
+  if (!playerBox) {
+    return;
+  }
+
+  const isHidden = playerBox.classList.contains("hidden");
+
+  // Close other inline players so the screen stays tidy.
+  document.querySelectorAll(".inline-audio-player").forEach(player => {
+    if (player.id !== playerId) {
+      player.classList.add("hidden");
+      player.innerHTML = "";
+    }
+  });
+
+  if (!isHidden) {
+    playerBox.classList.add("hidden");
+    playerBox.innerHTML = "";
+    return;
+  }
+
+  playerBox.innerHTML = `
+    <audio class="resource-audio-control" controls controlsList="nodownload" preload="none">
+      <source src="${escapeForAttribute(link)}" />
+      Your browser cannot play this audio file.
+    </audio>
+  `;
+
+  playerBox.classList.remove("hidden");
 }
 
 function openStudentResourceLink(link) {
@@ -862,6 +946,8 @@ function openStudentResourceLink(link) {
 function getSmallResourceButtonLabel(type) {
   const resourceType = String(type || "").toUpperCase();
 
+  if (resourceType === "EBOOKS") return "Open eBook";
+  if (resourceType === "PRINTABLES") return "Open Printable";
   if (resourceType === "PDF") return "Open PDF";
   if (resourceType === "AUDIO") return "Play Audio";
   if (resourceType === "VIDEO" || resourceType === "MOVIE") return "Watch Video";

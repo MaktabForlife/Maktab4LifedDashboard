@@ -58,8 +58,8 @@
     <section id="student-home" class="screen student-theme">
       <div class="top-bar">
         <div>
-          <h2>Student Home</h2>
-          <p id="student-welcome" class="mini-text"></p>
+          <h2 id="student-home-title">Student</h2>
+          <p id="student-welcome" class="mini-text">Student Home page</p>
         </div>
         <button class="small-btn" onclick="logout()">Logout</button>
       </div>
@@ -106,7 +106,7 @@
           <span>Student Records</span>
         </button>
 
-        <button class="home-card" onclick="showPlaceholder('Attendance')">
+        <button class="home-card" onclick="showAttendanceDashboard()">
           <span class="card-icon">✓</span>
           <span>Attendance</span>
         </button>
@@ -172,19 +172,19 @@
     <!-- PROGRESS REPORT -->
 <section id="progress-report" class="screen admin-theme">
   <div class="nav-header">
-    <h2>Progress</h2>
-    <button class="small-btn" onclick="showScreen('admin-academics')">Back</button>
+    <h2>Progress Monitor</h2>
+    <button class="small-btn" onclick="showScreen('admin-home')">Back</button>
   </div>
 
   <div class="dashboard-section">
-    <h3>Class Progress</h3>
+    <h3>Progress for Class</h3>
     <button class="list-btn" onclick="openProgressContext('class', 'ALL')">
       View Full Class
     </button>
   </div>
 
   <div class="dashboard-section">
-    <h3>Group Progress</h3>
+    <h3>Progress for Groups</h3>
     <select id="progress-group-select">
       <option value="">Select a Group...</option>
     </select>
@@ -194,7 +194,7 @@
   </div>
 
   <div class="dashboard-section">
-    <h3>Individual Progress</h3>
+    <h3>Progress for Individuals</h3>
     <select id="progress-student-select">
       <option value="">Select a Student...</option>
     </select>
@@ -297,6 +297,39 @@
     
 
     
+
+    <!-- ADMIN ATTENDANCE -->
+    <section id="attendance-dashboard" class="screen admin-theme">
+      <div class="nav-header">
+        <h2>Attendance</h2>
+        <button class="small-btn" onclick="showScreen('admin-home')">Back</button>
+      </div>
+
+      <div class="list-stack">
+        <button class="list-btn" onclick="openMarkRegister()">Mark Register</button>
+        <button class="list-btn" onclick="openViewAttendance()">View Attendance Records</button>
+        <button class="list-btn" onclick="openAttendanceStats()">View Attendance Stats</button>
+      </div>
+    </section>
+
+    <section id="attendance-register-screen" class="screen admin-theme">
+      <div id="attendance-register-content" class="list-stack">
+        <p class="helper-text">Loading attendance...</p>
+      </div>
+    </section>
+
+    <section id="attendance-report-screen" class="screen admin-theme">
+      <div id="attendance-report-content" class="list-stack">
+        <p class="helper-text">Loading attendance...</p>
+      </div>
+    </section>
+
+    <section id="attendance-stats-screen" class="screen admin-theme">
+      <div id="attendance-stats-content" class="list-stack">
+        <p class="helper-text">Loading statistics...</p>
+      </div>
+    </section>
+
     <!-- PLACEHOLDER SCREEN -->
     <section id="placeholder-screen" class="screen">
       <div class="nav-header">

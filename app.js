@@ -194,8 +194,11 @@ async function submitLogin() {
       `${result.admin.username} · ${result.admin.role}`;
     showScreen("admin-home");
   } else {
-    document.getElementById("student-welcome").innerText =
-      `${result.student.username} · ${result.student.classgroup}`;
+    const studentHomeTitle = document.getElementById("student-home-title");
+    if (studentHomeTitle) {
+      studentHomeTitle.innerText = result.student.username || "Student";
+    }
+    document.getElementById("student-welcome").innerText = "Student Home page";
     showScreen("student-home");
   }
 }
@@ -335,19 +338,19 @@ function normalizeStudentTask(task) {
 function buildStudentSubjectTaskGroups(tasks) {
   const groups = {};
 
-  [...tasks].sort(sortBySubjectIdThenTask).forEach(task => {
-    const subjectName = task.subjectname || "Other";
-    const subjectKey = task.subjectid || subjectName;
+  [...tasks].sort(sortByModuleThenTask).forEach(task => {
+    const moduleName = task.modulename || "General";
+    const moduleKey = task.moduleid || moduleName;
 
-    if (!groups[subjectKey]) {
-      groups[subjectKey] = {
-        subjectid: task.subjectid || subjectKey,
-        subjectname: subjectName,
+    if (!groups[moduleKey]) {
+      groups[moduleKey] = {
+        subjectid: moduleKey,
+        subjectname: moduleName,
         tasks: []
       };
     }
 
-    groups[subjectKey].tasks.push(task);
+    groups[moduleKey].tasks.push(task);
   });
 
   return groups;
@@ -355,7 +358,7 @@ function buildStudentSubjectTaskGroups(tasks) {
 
 function renderStudentSubjectProgress() {
   const container = document.getElementById("progress-subjects-list");
-  const subjects = Object.values(studentSubjectTaskGroups).sort(sortSubjectGroupsBySubjectId);
+  const subjects = Object.values(studentSubjectTaskGroups).sort(sortModuleGroupsByModuleId);
 
   if (subjects.length === 0) {
     container.innerHTML = `<p class="helper-text">No tasks assigned yet.</p>`;
@@ -397,22 +400,14 @@ function renderStudentSubjectTaskList() {
   const subject = studentSubjectTaskGroups[currentStudentSubjectKey];
 
   if (!subject || subject.tasks.length === 0) {
-    container.innerHTML = `<p class="helper-text">No tasks found for this subject.</p>`;
+    container.innerHTML = `<p class="helper-text">No tasks found for this module.</p>`;
     return;
   }
 
-  const moduleGroups = buildStudentModuleTaskGroups(subject.tasks);
-
-  container.innerHTML = moduleGroups.map(moduleGroup => {
-    const rowsHtml = moduleGroup.tasks.map(task => renderStudentTaskStatusRow(task)).join("");
-
-    return `
-      <div class="student-task-module-block">
-        <div class="task-resource-heading">${escapeHtml(moduleGroup.modulename)}</div>
-        ${rowsHtml}
-      </div>
-    `;
-  }).join("");
+  container.innerHTML = [...subject.tasks]
+    .sort(sortByModuleThenTask)
+    .map(task => renderStudentTaskStatusRow(task))
+    .join("");
 }
 
 function buildStudentModuleTaskGroups(tasks) {
@@ -2393,4 +2388,439 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+
+/* =========================
+   ADMIN ATTENDANCE
+   Date system: YYYY-MM-DD strings generated from local browser date.
+   Backend normalizes with Africa/Johannesburg.
+========================= */
+
+let attendanceStudentsCache = [];
+let attendanceState = {};
+
+function showAttendanceDashboard() {
+  showScreen("attendance-dashboard");
+}
+
+function getLocalDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDefaultAttendanceDateRange() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  return {
+    start: getLocalDateString(firstDay),
+    end: getLocalDateString(now)
+  };
+}
+
+function formatDisplayDate(dateString) {
+  if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString || "";
+  }
+
+  const [year, month, day] = dateString.split("-").map(Number);
+  const localDate = new Date(year, month - 1, day);
+
+  return localDate.toLocaleDateString("en-ZA", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+async function openMarkRegister() {
+  const container = document.getElementById("attendance-register-content");
+  showScreen("attendance-register-screen");
+  container.innerHTML = `<p class="helper-text">Loading students...</p>`;
+
+  const result = await apiPost("/api/attendance/students", {
+    classgroup: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || result.message || "Failed to load students."}</p>`;
+    return;
+  }
+
+  attendanceStudentsCache = Array.isArray(result.students) ? result.students : [];
+  attendanceState = {};
+
+  attendanceStudentsCache.forEach(student => {
+    attendanceState[student.studentid] = "Present";
+  });
+
+  renderAttendanceRegister(getLocalDateString());
+}
+
+function renderAttendanceRegister(dateValue) {
+  const container = document.getElementById("attendance-register-content");
+  const students = [...attendanceStudentsCache].sort(sortAttendanceStudents);
+
+  const absentCount = students.filter(student => attendanceState[student.studentid] === "Absent").length;
+
+  let html = `
+    <div class="nav-header">
+      <h2>Attendance</h2>
+      <button class="small-btn save-return-btn attendance-save-btn" onclick="submitAttendanceRegister()">Save Attendance →</button>
+    </div>
+
+    <div class="attendance-date-row attendance-date-row-compact">
+      <input type="date" id="attendance-date" value="${escapeHtml(dateValue)}">
+      <span class="attendance-date-label">DATE</span>
+    </div>
+
+    <p class="attendance-absence-feedback">${absentCount} student${absentCount === 1 ? "" : "s"} marked absent</p>
+  `;
+
+  if (students.length === 0) {
+    html += `<p class="helper-text">No active students found.</p>`;
+  }
+
+  let currentGroup = "";
+
+  students.forEach(student => {
+    const group = String(student.classgroup || "Ungrouped");
+    if (group !== currentGroup) {
+      currentGroup = group;
+      html += `<div class="attendance-group-line" aria-label="Group ${escapeHtml(group)}"></div>`;
+    }
+
+    const status = attendanceState[student.studentid] || "Present";
+    const isPresent = status === "Present";
+
+    html += `
+      <div class="attendance-register-row">
+        <div class="attendance-student-name">${escapeHtml(student.username || student.studentid)}</div>
+        <button
+          class="attendance-toggle ${isPresent ? "is-present" : "is-absent"}"
+          onclick="toggleAttendanceStatus('${escapeJs(student.studentid)}')"
+        >
+          ${isPresent ? "PRESENT ✔" : "ABSENT ✘"}
+        </button>
+      </div>
+    `;
+  });
+
+  html += ``;
+
+  container.innerHTML = html;
+}
+
+function toggleAttendanceStatus(studentid) {
+  attendanceState[studentid] = attendanceState[studentid] === "Absent" ? "Present" : "Absent";
+  const dateValue = document.getElementById("attendance-date")?.value || getLocalDateString();
+  renderAttendanceRegister(dateValue);
+}
+
+async function submitAttendanceRegister() {
+  const dateValue = document.getElementById("attendance-date")?.value || "";
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    alert("Please select a valid date.");
+    return;
+  }
+
+  const absentStudents = attendanceStudentsCache
+    .filter(student => attendanceState[student.studentid] === "Absent")
+    .map(student => ({
+      studentid: student.studentid,
+      username: student.username,
+      classgroup: student.classgroup
+    }));
+
+  const saveButton = document.querySelector("#attendance-register-content .attendance-save-btn");
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.innerText = "Saving...";
+  }
+
+  const result = await apiPost("/api/attendance/submit-absent", {
+    date: dateValue,
+    absentStudents
+  }, state.token);
+
+  if (!result.success) {
+    alert(result.error || result.message || "Failed to save attendance.");
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.innerText = "Save Attendance →";
+    }
+    return;
+  }
+
+  alert(`Attendance saved successfully. ${absentStudents.length} student${absentStudents.length === 1 ? "" : "s"} marked absent.`);
+  showScreen("attendance-dashboard");
+}
+
+function openViewAttendance() {
+  const range = getDefaultAttendanceDateRange();
+  renderViewAttendanceScreen(range.start, range.end);
+}
+
+async function renderViewAttendanceScreen(startDate, endDate) {
+  const container = document.getElementById("attendance-report-content");
+  showScreen("attendance-report-screen");
+  container.innerHTML = `<p class="helper-text">Loading attendance...</p>`;
+
+  const result = await apiPost("/api/attendance/report", {
+    startDate,
+    endDate,
+    classgroup: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || result.message || "Failed to load attendance."}</p>`;
+    return;
+  }
+
+  const groups = groupAttendanceStudents(result.students || []);
+  const sortedGroups = Object.keys(groups).sort(sortGroupValues);
+
+  let html = `
+    <div class="nav-header">
+      <h2>View Attendance for a Date Range</h2>
+      <button class="small-btn" onclick="showScreen('attendance-dashboard')">Back</button>
+    </div>
+
+    <div class="attendance-filter-box">
+      <div class="attendance-date-row">
+        <input type="date" id="view-start-date" value="${escapeHtml(startDate)}">
+        <span class="attendance-date-label">START DATE</span>
+      </div>
+
+      <div class="attendance-date-row">
+        <input type="date" id="view-end-date" value="${escapeHtml(endDate)}">
+        <span class="attendance-date-label">END DATE</span>
+      </div>
+
+      <button onclick="renderViewAttendanceScreen(
+        document.getElementById('view-start-date').value,
+        document.getElementById('view-end-date').value
+      )">Filter</button>
+    </div>
+
+    <div class="attendance-report-header">
+      <div>NAME</div>
+      <div>DAY ABSENT</div>
+      <div>ATT %</div>
+    </div>
+  `;
+
+  if (sortedGroups.length === 0) {
+    html += `<p class="helper-text">No attendance records found.</p>`;
+  }
+
+  sortedGroups.forEach(group => {
+    html += `<div class="attendance-group-line" aria-label="Group ${escapeHtml(group)}"></div>`;
+
+    groups[group].forEach(student => {
+      const rowId = `abs-${safeDomId(student.studentid)}`;
+
+      html += `
+        <div class="attendance-report-row" onclick="toggleAbsentDates('${rowId}')">
+          <div>${escapeHtml(student.username || student.studentid)}</div>
+          <div>${student.absentDays || 0}</div>
+          <div>${formatPercent(student.attendancePercent)}</div>
+        </div>
+
+        <div id="${rowId}" class="attendance-absent-dates">
+          ${renderAbsentDates(student.absentDates || [])}
+        </div>
+      `;
+    });
+  });
+
+  container.innerHTML = html;
+}
+
+function openAttendanceStats() {
+  const range = getDefaultAttendanceDateRange();
+  renderAttendanceStatsScreen(range.start, range.end);
+}
+
+async function renderAttendanceStatsScreen(startDate, endDate) {
+  const container = document.getElementById("attendance-stats-content");
+  showScreen("attendance-stats-screen");
+  container.innerHTML = `<p class="helper-text">Calculating statistics...</p>`;
+
+  const result = await apiPost("/api/attendance/report", {
+    startDate,
+    endDate,
+    classgroup: "ALL"
+  }, state.token);
+
+  if (!result.success) {
+    container.innerHTML = `<p class="error-message">${result.error || result.message || "Failed to load statistics."}</p>`;
+    return;
+  }
+
+  const groupAverages = Array.isArray(result.groupAverages) ? result.groupAverages : [];
+  const perfectStudents = Array.isArray(result.perfectAttendanceStudents) ? result.perfectAttendanceStudents : [];
+
+  let html = `
+    <div class="nav-header">
+      <h2>Statistics</h2>
+      <button class="small-btn" onclick="showScreen('attendance-dashboard')">Back</button>
+    </div>
+
+    <div class="attendance-filter-box">
+      <div class="attendance-date-row">
+        <input type="date" id="stats-start-date" value="${escapeHtml(startDate)}">
+        <span class="attendance-date-label">START DATE</span>
+      </div>
+
+      <div class="attendance-date-row">
+        <input type="date" id="stats-end-date" value="${escapeHtml(endDate)}">
+        <span class="attendance-date-label">END DATE</span>
+      </div>
+
+      <button onclick="renderAttendanceStatsScreen(
+        document.getElementById('stats-start-date').value,
+        document.getElementById('stats-end-date').value
+      )">Filter</button>
+    </div>
+
+    <div class="attendance-stat-grid">
+      <div class="attendance-stat-card">
+        <div class="attendance-stat-label">MAKTAB DAYS</div>
+        <div class="attendance-stat-number">${result.totalMaktabDays || 0}</div>
+      </div>
+
+      <div class="attendance-stat-card">
+        <div class="attendance-stat-label">CLASS %</div>
+        <div class="attendance-stat-number">${formatPercent(result.registerAverageAttendancePercent)}</div>
+      </div>
+    </div>
+
+    <div class="attendance-breakdown-card">
+      <h3>Group Breakdown</h3>
+  `;
+
+  groupAverages.sort((a, b) => sortGroupValues(a.classgroup, b.classgroup)).forEach(group => {
+    const pct = Number(group.averageAttendancePercent || 0);
+
+    html += `
+      <div class="attendance-breakdown-row">
+        <div class="attendance-breakdown-label attendance-breakdown-label-grid">
+          <span>Group ${escapeHtml(group.classgroup)}</span>
+          <span>${formatPercent(pct)}</span>
+        </div>
+        <div class="attendance-bar-track">
+          <div class="attendance-bar-fill" style="width:${Math.max(0, Math.min(100, pct))}%"></div>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `
+    </div>
+
+    <div class="attendance-breakdown-card">
+      <h3>100% Attendance 🏆</h3>
+      <div class="attendance-perfect-list">
+  `;
+
+  if (!result.totalMaktabDays) {
+    html += `<div class="helper-text">No maktab days recorded for this date range.</div>`;
+  } else if (perfectStudents.length === 0) {
+    html += `<div class="helper-text">No students have 100% attendance.</div>`;
+  } else {
+    perfectStudents
+      .sort(sortAttendanceStudents)
+      .forEach(student => {
+        html += `<div class="attendance-perfect-row">⭐ ${escapeHtml(student.username)} <span class="mini-text">(Grp ${escapeHtml(student.classgroup)})</span></div>`;
+      });
+  }
+
+  html += `
+      </div>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+function sortAttendanceStudents(a, b) {
+  const groupCompare = sortGroupValues(a.classgroup, b.classgroup);
+  if (groupCompare !== 0) return groupCompare;
+
+  return String(a.username || "").localeCompare(String(b.username || ""), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
+function sortGroupValues(a, b) {
+  return String(a || "").localeCompare(String(b || ""), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
+function groupAttendanceStudents(students) {
+  const groups = {};
+
+  students.forEach(student => {
+    const group = String(student.classgroup || "Ungrouped");
+    if (!groups[group]) {
+      groups[group] = [];
+    }
+
+    groups[group].push(student);
+  });
+
+  Object.keys(groups).forEach(group => {
+    groups[group].sort(sortAttendanceStudents);
+  });
+
+  return groups;
+}
+
+function renderAbsentDates(absentDates) {
+  if (!absentDates.length) {
+    return `<div>No absences recorded</div>`;
+  }
+
+  return `
+    <div style="margin-bottom:6px; font-weight:bold;">Absent Dates</div>
+    ${absentDates.map(date => `<div>${escapeHtml(formatDisplayDate(date))}</div>`).join("")}
+  `;
+}
+
+function toggleAbsentDates(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("is-open");
+}
+
+function formatPercent(value) {
+  const n = Number(value || 0);
+  return `${Math.round(n)}%`;
+}
+
+function safeDomId(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeJs(value) {
+  return String(value ?? "")
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'");
 }

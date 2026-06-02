@@ -331,7 +331,11 @@ function normalizeStudentTask(task) {
     moduleid: getStudentTaskField(task, ["moduleid", "moduleID", "ModuleID", "ModuleId"]),
     modulename: getStudentTaskField(task, ["modulename", "moduleName", "ModuleName", "Module"]),
     completestatus: getStudentTaskField(task, ["completestatus", "completeStatus", "CompleteStatus", "Complete", "Completed"]),
-    verifystatus: getStudentTaskField(task, ["verifystatus", "verifyStatus", "VerifyStatus", "Verified"])
+    verifystatus: getStudentTaskField(task, ["verifystatus", "verifyStatus", "VerifyStatus", "Verified"]),
+    audiolink: getStudentTaskField(task, ["audiolink", "audioLink", "AudioLink", "Audio"]),
+    graphiclink: getStudentTaskField(task, ["graphiclink", "graphicLink", "GraphicLink", "GraphicsLink", "ImageLink", "visuallink", "visualLink", "VisualLink"]),
+    videolink: getStudentTaskField(task, ["videolink", "videoLink", "VideoLink", "Video"]),
+    pdflink: getStudentTaskField(task, ["pdflink", "pdfLink", "PDFLink", "PdfLink", "PDF"])
   };
 }
 
@@ -443,7 +447,10 @@ function renderStudentTaskStatusRow(task) {
 
   return `
     <div class="student-status-row">
-      <div class="student-status-name">${escapeHtml(task.taskname)}</div>
+      <div class="student-status-name">
+        <div>${escapeHtml(task.taskname)}</div>
+        ${renderStudentTaskLinkButtons(task)}
+      </div>
 
       <div class="status-action" onclick="toggleStudentSubjectTask('${escapeForAttribute(task.studenttaskid)}', ${isComplete ? "false" : "true"})">
         ${
@@ -463,6 +470,139 @@ function renderStudentTaskStatusRow(task) {
     </div>
   `;
 }
+
+
+function renderStudentTaskLinkButtons(task) {
+  const links = [];
+
+  if (task.audiolink) {
+    links.push({
+      type: "AUDIO",
+      label: "▶",
+      title: "Play Audio",
+      link: task.audiolink,
+      inline: true
+    });
+  }
+
+  if (task.graphiclink) {
+    links.push({
+      type: "GRAPHIC",
+      label: "▧",
+      title: "Open Graphic",
+      link: task.graphiclink,
+      inline: false
+    });
+  }
+
+  if (task.videolink) {
+    links.push({
+      type: "VIDEO",
+      label: "▶",
+      title: "Play Video",
+      link: task.videolink,
+      inline: true
+    });
+  }
+
+  if (task.pdflink) {
+    links.push({
+      type: "PDF",
+      label: "PDF",
+      title: "Open PDF",
+      link: task.pdflink,
+      inline: false
+    });
+  }
+
+  if (links.length === 0) {
+    return "";
+  }
+
+  const safeTaskId = safeDomId(task.studenttaskid || task.taskid || task.taskname);
+  const buttonsHtml = links.map((item, index) => {
+    const playerId = `student-task-player-${safeTaskId}-${index}`;
+
+    if (item.inline) {
+      return `
+        <button
+          type="button"
+          class="student-task-link-btn"
+          title="${escapeHtml(item.title)}"
+          onclick="event.stopPropagation(); toggleStudentTaskInlinePlayer('${escapeForAttribute(playerId)}', '${escapeForAttribute(item.link)}', '${escapeForAttribute(item.type)}')"
+        >${escapeHtml(item.label)}</button>
+        <div id="${escapeHtml(playerId)}" class="student-task-inline-player hidden"></div>
+      `;
+    }
+
+    return `
+      <button
+        type="button"
+        class="student-task-link-btn"
+        title="${escapeHtml(item.title)}"
+        onclick="event.stopPropagation(); openStudentTaskExternalLink('${escapeForAttribute(item.link)}', '${escapeForAttribute(item.type)}')"
+      >${escapeHtml(item.label)}</button>
+    `;
+  }).join("");
+
+  return `<div class="student-task-link-row">${buttonsHtml}</div>`;
+}
+
+function toggleStudentTaskInlinePlayer(playerId, link, type) {
+  if (!link) return;
+
+  const player = document.getElementById(playerId);
+  if (!player) return;
+
+  const isHidden = player.classList.contains("hidden");
+
+  document.querySelectorAll(".student-task-inline-player").forEach(item => {
+    if (item.id !== playerId) {
+      item.classList.add("hidden");
+      item.innerHTML = "";
+    }
+  });
+
+  if (!isHidden) {
+    player.classList.add("hidden");
+    player.innerHTML = "";
+    return;
+  }
+
+  const resourceType = String(type || "").toUpperCase();
+
+  if (resourceType === "VIDEO") {
+    player.innerHTML = `
+      <video class="student-task-media-control" controls controlsList="nodownload" preload="metadata">
+        <source src="${escapeForAttribute(link)}" />
+        Your browser cannot play this video file.
+      </video>
+    `;
+  } else {
+    player.innerHTML = `
+      <audio class="student-task-media-control" controls controlsList="nodownload" preload="none">
+        <source src="${escapeForAttribute(link)}" />
+        Your browser cannot play this audio file.
+      </audio>
+    `;
+  }
+
+  player.classList.remove("hidden");
+}
+
+function openStudentTaskExternalLink(link, type) {
+  if (!link) return;
+
+  const resourceType = String(type || "").toUpperCase();
+
+  if (resourceType === "PDF" || isPdfLink(link)) {
+    openPdfResource(link);
+    return;
+  }
+
+  window.open(link, "_blank", "noopener,noreferrer");
+}
+
 
 function toggleStudentSubjectTask(studenttaskid, complete) {
   if (!progressPendingUpdates[studenttaskid]) {
@@ -588,7 +728,7 @@ function setResourceScreensForAdmin() {
   const listBackButton = document.querySelector("#student-resources-subjects .small-btn");
   if (listBackButton) {
     listBackButton.innerText = "Back";
-    listBackButton.setAttribute("onclick", "showScreen('admin-academics')");
+    listBackButton.setAttribute("onclick", "showScreen('admin-home')");
   }
 
   const detailBackButton = document.querySelector("#student-resources-detail .small-btn");

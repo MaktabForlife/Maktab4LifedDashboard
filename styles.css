@@ -1789,3 +1789,59 @@ button:active {
     font-size: 1rem;
   }
 }
+
+
+/* Student Progress task resource links */
+.student-task-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.student-task-link-btn {
+  width: auto;
+  min-width: 34px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-family: Arial, sans-serif;
+  font-size: 0.78rem;
+  font-weight: bold;
+  letter-spacing: 0;
+  line-height: 1;
+  background: var(--student-dark);
+  color: var(--white);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.18);
+}
+
+.student-task-inline-player {
+  flex: 1 1 100%;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.student-task-media-control {
+  width: 100%;
+  max-width: 260px;
+  display: block;
+}
+
+@media (max-width: 520px) {
+  .student-task-link-row {
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .student-task-link-btn {
+    min-width: 32px;
+    min-height: 28px;
+    padding: 4px 7px;
+    font-size: 0.72rem;
+  }
+
+  .student-task-media-control {
+    max-width: 220px;
+  }
+}

@@ -1726,10 +1726,17 @@ async function saveSubjectChanges() {
 ========================= */
 
 function normalizeProgressSubject(subject) {
+  const moduleId = subject.moduleid || subject.moduleID || subject.ModuleID || subject.subjectid || subject.SubjectID || "";
+  const moduleName = subject.modulename || subject.moduleName || subject.ModuleName || subject.subjectname || subject.SubjectName || "Module";
+
   return {
     ...subject,
-    subjectid: getStudentTaskField(subject, ["subjectid", "subjectID", "SubjectID", "SubjectId"]),
-    subjectname: getStudentTaskField(subject, ["subjectname", "subjectName", "SubjectName", "Subject"], "Other")
+    subjectid: moduleId,
+    subjectname: moduleName,
+    moduleid: moduleId,
+    modulename: moduleName,
+    completedPercent: Number(subject.completedPercent || subject.completePercent || 0),
+    verifiedPercent: Number(subject.verifiedPercent || subject.verifyPercent || 0)
   };
 }
 
@@ -1793,7 +1800,7 @@ async function loadProgressSelectors() {
   const studentSelect = document.getElementById("progress-student-select");
 
   const groups = [...new Set(result.students.map(s => s.classgroup))]
-    .filter(Boolean)
+    .filter(group => group && String(group).trim() !== "0")
     .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
 
   groupSelect.innerHTML = `<option value="">Select a Group...</option>`;
@@ -1808,6 +1815,7 @@ async function loadProgressSelectors() {
   const studentsMap = {};
 
   result.students.forEach(row => {
+    if (String(row.classgroup || "").trim() === "0") return;
     if (!studentsMap[row.studentid]) {
       studentsMap[row.studentid] = {
         studentid: row.studentid,
@@ -1872,6 +1880,7 @@ function openSelectedStudentProgress() {
 }
 
 async function openProgressContext(type, value) {
+  setProgressScreensForAdmin();
   progressState.contextType = type;
   progressState.subjectid = "ALL";
   progressState.taskid = "ALL";
@@ -1881,7 +1890,7 @@ async function openProgressContext(type, value) {
   if (type === "class") {
     progressState.classgroup = "ALL";
     progressState.studentid = "ALL";
-    document.getElementById("progress-subjects-title").innerText = "Class Subjects";
+    document.getElementById("progress-subjects-title").innerText = "Class Modules";
     await loadProgressSubjects();
     return;
   }
@@ -1889,7 +1898,7 @@ async function openProgressContext(type, value) {
   if (type === "group") {
     progressState.classgroup = value;
     progressState.studentid = "ALL";
-    document.getElementById("progress-subjects-title").innerText = `${value} Subjects`;
+    document.getElementById("progress-subjects-title").innerText = `${value} Modules`;
     await loadProgressSubjects();
     return;
   }
@@ -1928,12 +1937,12 @@ async function loadProgressSubjects() {
   }, state.token);
 
   if (!result.success) {
-    container.innerHTML = `<p class="error-message">${result.error || "Could not load subjects."}</p>`;
+    container.innerHTML = `<p class="error-message">${result.error || "Could not load modules."}</p>`;
     return;
   }
 
   if (!result.subjects || result.subjects.length === 0) {
-    container.innerHTML = `<p class="helper-text">No assigned subjects found.</p>`;
+    container.innerHTML = `<p class="helper-text">No assigned modules found.</p>`;
     return;
   }
 
@@ -2046,6 +2055,7 @@ function renderProgressTaskStudents(rows) {
   const byGroup = {};
 
   rows.forEach(row => {
+    if (String(row.classgroup || "").trim() === "0") return;
     if (!byGroup[row.classgroup]) {
       byGroup[row.classgroup] = [];
     }
@@ -2140,7 +2150,7 @@ function renderIndividualStudentTaskList(rows) {
 
   const bySubject = {};
 
-  rows.map(normalizeProgressStudentRow).sort(sortBySubjectIdThenTask).forEach(row => {
+  rows.map(normalizeProgressStudentRow).filter(row => String(row.classgroup || "").trim() !== "0").sort(sortBySubjectIdThenTask).forEach(row => {
     const subjectKey = row.subjectid || row.subjectname || "Other";
     const moduleKey = row.moduleid || row.modulename || "General";
 
@@ -2543,7 +2553,7 @@ function escapeHtml(value) {
    MANUAL REFRESH BUTTONS
 ========================= */
 
-function setManualRefreshButton(screenId, handlerName, label = "Refresh ↻") {
+function setManualRefreshButton(screenId, handlerName, label = "↻") {
   const screen = document.getElementById(screenId);
   if (!screen) return;
 
@@ -2559,6 +2569,8 @@ function setManualRefreshButton(screenId, handlerName, label = "Refresh ↻") {
   button.type = "button";
   button.className = "small-btn manual-refresh-btn";
   button.innerText = label;
+  button.setAttribute("aria-label", "Refresh");
+  button.setAttribute("title", "Refresh");
   button.setAttribute("onclick", handlerName);
 
   const lastButton = header.querySelector("button:last-of-type");
@@ -2583,7 +2595,7 @@ function confirmRefreshIfUnsaved() {
 
 async function runManualRefresh(button, callback) {
   const refreshButton = button || event?.target;
-  const originalText = refreshButton ? refreshButton.innerText : "Refresh ↻";
+  const originalText = refreshButton ? refreshButton.innerText : "↻";
 
   if (refreshButton) {
     refreshButton.disabled = true;
@@ -2875,7 +2887,7 @@ async function renderViewAttendanceScreen(startDate, endDate) {
   let html = `
     <div class="nav-header">
       <h2>View Attendance for a Date Range</h2>
-      <button class="small-btn manual-refresh-btn" onclick="refreshViewAttendance(this)">Refresh ↻</button>
+      <button class="small-btn manual-refresh-btn" title="Refresh" aria-label="Refresh" onclick="refreshViewAttendance(this)">↻</button>
       <button class="small-btn" onclick="showScreen('attendance-dashboard')">Back</button>
     </div>
 
@@ -2957,7 +2969,7 @@ async function renderAttendanceStatsScreen(startDate, endDate) {
   let html = `
     <div class="nav-header">
       <h2>Statistics</h2>
-      <button class="small-btn manual-refresh-btn" onclick="refreshAttendanceStats(this)">Refresh ↻</button>
+      <button class="small-btn manual-refresh-btn" title="Refresh" aria-label="Refresh" onclick="refreshAttendanceStats(this)">↻</button>
       <button class="small-btn" onclick="showScreen('attendance-dashboard')">Back</button>
     </div>
 

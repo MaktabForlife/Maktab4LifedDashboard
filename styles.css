@@ -1885,3 +1885,49 @@ button:active {
   }
 }
 
+
+
+/* Final progress/module refinements */
+.manual-refresh-btn {
+  width: 48px;
+  min-width: 48px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  font-size: 1.35rem;
+  font-weight: bold;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-theme .task-resource-heading,
+.admin-theme .subject-heading-thin {
+  background: var(--teal-dark);
+  color: var(--white);
+}
+
+.group-separator-line {
+  height: 8px;
+  background: var(--teal-dark);
+  border-radius: 999px;
+  margin: 18px 0 14px;
+}
+
+.student-theme .group-separator-line {
+  background: var(--student-dark);
+}
+
+@media (max-width: 520px) {
+  .nav-header .manual-refresh-btn {
+    flex: 0 0 48px;
+    min-width: 48px;
+    width: 48px;
+  }
+
+  .group-separator-line {
+    height: 8px;
+  }
+}

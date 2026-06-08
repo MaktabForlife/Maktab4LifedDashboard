@@ -235,6 +235,7 @@ let currentStudentSubjectKey = "";
 
 async function showStudentTasks() {
   setProgressScreensForStudent();
+  setManualRefreshButton("progress-subjects-screen", "refreshStudentTaskProgress(this)");
   showScreen("progress-subjects-screen");
 
   const title = document.getElementById("progress-subjects-title");
@@ -385,6 +386,7 @@ function renderStudentSubjectProgress() {
 
 function openStudentSubjectTasks(subjectKey) {
   setProgressScreensForStudent();
+  setManualRefreshButton("progress-tasks-screen", "refreshStudentModuleTaskList(this)");
 
   const subject = studentSubjectTaskGroups[subjectKey];
 
@@ -1912,6 +1914,7 @@ async function openProgressContext(type, value) {
 }
 
 async function loadProgressSubjects() {
+  setManualRefreshButton("progress-subjects-screen", "refreshProgressSubjects(this)");
   showScreen("progress-subjects-screen");
 
   const container = document.getElementById("progress-subjects-list");
@@ -1961,6 +1964,7 @@ async function openProgressSubject(subjectid, subjectname) {
 }
 
 async function loadProgressTasks() {
+  setManualRefreshButton("progress-tasks-screen", "refreshProgressTasks(this)");
   showScreen("progress-tasks-screen");
 
   const container = document.getElementById("progress-tasks-list");
@@ -2007,6 +2011,7 @@ async function openProgressTask(taskid, taskname) {
 }
 
 async function loadProgressTaskStudents() {
+  setManualRefreshButton("progress-task-students-screen", "refreshProgressTaskStudents(this)");
   showScreen("progress-task-students-screen");
 
   progressPendingUpdates = {};
@@ -2101,6 +2106,7 @@ function renderProgressTaskStudents(rows) {
 }
 
 async function loadIndividualStudentTaskList() {
+  setManualRefreshButton("progress-task-students-screen", "refreshIndividualStudentTaskList(this)");
   showScreen("progress-task-students-screen");
 
   progressPendingUpdates = {};
@@ -2531,6 +2537,148 @@ function escapeHtml(value) {
 }
 
 
+
+
+/* =========================
+   MANUAL REFRESH BUTTONS
+========================= */
+
+function setManualRefreshButton(screenId, handlerName, label = "Refresh ↻") {
+  const screen = document.getElementById(screenId);
+  if (!screen) return;
+
+  const header = screen.querySelector(".nav-header");
+  if (!header) return;
+
+  const existing = header.querySelector(".manual-refresh-btn");
+  if (existing) {
+    existing.remove();
+  }
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "small-btn manual-refresh-btn";
+  button.innerText = label;
+  button.setAttribute("onclick", handlerName);
+
+  const lastButton = header.querySelector("button:last-of-type");
+  if (lastButton) {
+    header.insertBefore(button, lastButton);
+  } else {
+    header.appendChild(button);
+  }
+}
+
+function hasUnsavedProgressChanges() {
+  return !!(typeof progressPendingUpdates !== "undefined" && Object.keys(progressPendingUpdates || {}).length > 0);
+}
+
+function confirmRefreshIfUnsaved() {
+  if (!hasUnsavedProgressChanges()) {
+    return true;
+  }
+
+  return confirm("You have unsaved changes. Refreshing will discard them. Continue?");
+}
+
+async function runManualRefresh(button, callback) {
+  const refreshButton = button || event?.target;
+  const originalText = refreshButton ? refreshButton.innerText : "Refresh ↻";
+
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.innerText = "Updating...";
+  }
+
+  try {
+    await callback();
+  } finally {
+    if (refreshButton) {
+      refreshButton.disabled = false;
+      refreshButton.innerText = originalText;
+    }
+  }
+}
+
+async function refreshStudentTaskProgress(button) {
+  if (!confirmRefreshIfUnsaved()) return;
+
+  await runManualRefresh(button, async () => {
+    progressPendingUpdates = {};
+    await showStudentTasks();
+  });
+}
+
+async function refreshStudentModuleTaskList(button) {
+  if (!confirmRefreshIfUnsaved()) return;
+
+  const previousModuleKey = currentStudentSubjectKey;
+
+  await runManualRefresh(button, async () => {
+    progressPendingUpdates = {};
+    await showStudentTasks();
+
+    if (previousModuleKey && studentSubjectTaskGroups && studentSubjectTaskGroups[previousModuleKey]) {
+      openStudentSubjectTasks(previousModuleKey);
+    }
+  });
+}
+
+async function refreshProgressSubjects(button) {
+  if (!confirmRefreshIfUnsaved()) return;
+
+  await runManualRefresh(button, async () => {
+    progressPendingUpdates = {};
+    await loadProgressSubjects();
+  });
+}
+
+async function refreshProgressTasks(button) {
+  if (!confirmRefreshIfUnsaved()) return;
+
+  await runManualRefresh(button, async () => {
+    progressPendingUpdates = {};
+    await loadProgressTasks();
+  });
+}
+
+async function refreshProgressTaskStudents(button) {
+  if (!confirmRefreshIfUnsaved()) return;
+
+  await runManualRefresh(button, async () => {
+    progressPendingUpdates = {};
+    await loadProgressTaskStudents();
+  });
+}
+
+async function refreshIndividualStudentTaskList(button) {
+  if (!confirmRefreshIfUnsaved()) return;
+
+  await runManualRefresh(button, async () => {
+    progressPendingUpdates = {};
+    await loadIndividualStudentTaskList();
+  });
+}
+
+async function refreshViewAttendance(button) {
+  const startDate = document.getElementById("view-start-date")?.value;
+  const endDate = document.getElementById("view-end-date")?.value;
+
+  await runManualRefresh(button, async () => {
+    await renderViewAttendanceScreen(startDate, endDate);
+  });
+}
+
+async function refreshAttendanceStats(button) {
+  const startDate = document.getElementById("stats-start-date")?.value;
+  const endDate = document.getElementById("stats-end-date")?.value;
+
+  await runManualRefresh(button, async () => {
+    await renderAttendanceStatsScreen(startDate, endDate);
+  });
+}
+
+
 /* =========================
    ADMIN ATTENDANCE
    Date system: YYYY-MM-DD strings generated from local browser date.
@@ -2727,6 +2875,7 @@ async function renderViewAttendanceScreen(startDate, endDate) {
   let html = `
     <div class="nav-header">
       <h2>View Attendance for a Date Range</h2>
+      <button class="small-btn manual-refresh-btn" onclick="refreshViewAttendance(this)">Refresh ↻</button>
       <button class="small-btn" onclick="showScreen('attendance-dashboard')">Back</button>
     </div>
 
@@ -2808,6 +2957,7 @@ async function renderAttendanceStatsScreen(startDate, endDate) {
   let html = `
     <div class="nav-header">
       <h2>Statistics</h2>
+      <button class="small-btn manual-refresh-btn" onclick="refreshAttendanceStats(this)">Refresh ↻</button>
       <button class="small-btn" onclick="showScreen('attendance-dashboard')">Back</button>
     </div>
 

@@ -108,7 +108,7 @@ h3 {
 
 .app-logo {
   width: 38vw;
-  max-width: 200px;
+  max-width: 120px;
   aspect-ratio: 1 / 1;
   object-fit: cover;
   border-radius: 50%;
@@ -1845,3 +1845,43 @@ button:active {
     max-width: 220px;
   }
 }
+
+
+/* Manual refresh buttons */
+.manual-refresh-btn {
+  min-width: 92px;
+  background: #0a8f8f;
+}
+
+.manual-refresh-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.nav-header .manual-refresh-btn {
+  margin-left: auto;
+}
+
+@media (max-width: 520px) {
+  .nav-header {
+    flex-wrap: wrap;
+  }
+
+  .nav-header h2 {
+    flex: 1 1 100%;
+    margin-bottom: 4px;
+  }
+
+  .nav-header .manual-refresh-btn {
+    min-width: 104px;
+    flex: 1 1 auto;
+    order: 2;
+    margin-left: 0;
+  }
+
+  .nav-header .small-btn:not(.manual-refresh-btn) {
+    flex: 0 0 auto;
+    order: 3;
+  }
+}
+

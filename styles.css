@@ -108,13 +108,16 @@ h3 {
 
 .app-logo {
   width: 38vw;
-  max-width: 120px;
+  max-width: 200px;
   aspect-ratio: 1 / 1;
   object-fit: cover;
-  border-radius: 50%;
+  border-radius: 8px;
   margin: 0 auto 15px;
   display: block;
+    background-color: transparent;
+
 }
+
 
 #auth-screen.student-theme {
   --teal: #234569;
